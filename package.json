@@ -1,0 +1,11 @@
+{
+  "name": "production_server",
+  "version": "1.0.0",
+  "description": "Its a production server",
+  "main": "index.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "author": "Pankaj",
+  "license": "ISC"
+}
