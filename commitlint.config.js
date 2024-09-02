@@ -1,28 +1,9 @@
-export default  {
-    extends: ["@commitlint/cli", "@commitlint/config-conventional"],
+export default {
+    extends: ['@commitlint/cli', '@commitlint/config-conventional'],
     rules: {
-        "type-enum": [
-            2,
-            "always",
-            [
-                "Ci", 
-                "Fix", 
-                "Doc", 
-                "Test",
-                "Build", 
-                "Chore",
-                "Scale", 
-                "Revert" ,
-                "Feature", 
-                "Initial", 
-                "Refactor", 
-                "Optimized", 
-
-
-            ]
-        ],
-        "subject-case": [2, "always", "sentence-case"],
-        "type-case": [2, "always", "sentence-case"]
+        'type-enum': [2, 'always', ['Ci', 'Fix', 'Doc', 'Test', 'Build', 'Chore', 'Scale', 'Revert', 'Feature', 'Initial', 'Refactor', 'Optimized']],
+        'subject-case': [2, 'always', 'sentence-case'],
+        'type-case': [2, 'always', 'sentence-case']
     }
 }
 
