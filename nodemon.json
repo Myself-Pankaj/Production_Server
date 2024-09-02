@@ -1,0 +1,5 @@
+{
+    "ext": "js",
+    "ignore": ["dist", "node_modules"],
+    "exec": "node server.js"
+}
