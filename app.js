@@ -6,7 +6,9 @@ import globalErrorHandler from './src/middlewares/globalErrorHandler.js'
 import httpError from './src/utils/httpError.js'
 import responseMessage from './src/constants/responseMessage.js'
 import { fileURLToPath } from 'url'
+import helmet from 'helmet'
 const app = express()
+app.use(helmet())
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 app.use(express.json({ limit: '50mb' }))
