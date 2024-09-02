@@ -5,8 +5,8 @@
     "main": "index.js",
     "type": "module",
     "scripts": {
-        "dev": "nodemon server.js",
-        "start": "node server.js",
+        "dev": "cross-env NODE_ENV=production nodemon server.js",
+        "start": "cross-env NODE_ENV=development node server.js",
         "lint": "eslint",
         "lint-fix": "eslint --fix",
         "format-check": "prettier . --check",
@@ -16,7 +16,7 @@
     "author": "Pankaj",
     "license": "ISC",
     "lint-staged": {
-        "*.ts": [
+        "*.js": [
             "npm run lint-fix",
             "npm run format-fix"
         ]
@@ -32,5 +32,9 @@
         "lint-staged": "^15.2.10",
         "nodemon": "^3.1.4",
         "prettier": "^3.3.3"
+    },
+    "dependencies": {
+        "cross-env": "^7.0.3",
+        "dotenv-flow": "^4.1.0"
     }
 }
