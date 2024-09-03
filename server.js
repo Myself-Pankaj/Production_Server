@@ -1,5 +1,6 @@
 import app from './app.js'
 import config from './src/config/config.js'
+import { initRateLimiter } from './src/config/rateLimiter.js'
 import databaseService from './src/services/databaseService.js'
 import logger from './src/utils/logger.js'
 
@@ -13,6 +14,9 @@ const server = app.listen(config.PORT)
         logger.info('DATABASE CONNECTION = TRUE', {
             meta: { CONNECTION_NAME: connection.name }
         })
+
+        initRateLimiter(connection)
+        logger.info(`RATE_LIMITER_INITIATED`)
 
         // Log application start
         logger.info('SERVER IS STARTED && HEALTHY = TRUE', {
