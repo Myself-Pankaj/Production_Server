@@ -91,7 +91,7 @@ const MongodbTransport = () => {
             level: 'info',
             db: config.DB_URI,
             metaKey: 'meta',
-            expireAfterSeconds: 3600 * 24 * 30,
+            expireAfterSeconds: 3600 * 24 * 1,
             options: {
                 useUnifiedTopology: true
             },
@@ -106,6 +106,10 @@ const logger = createLogger({
 
 export default logger
 
+/**
+ * @param level
+ * @example
+ */
 function colorizeLevel(level) {
     switch (level.toUpperCase()) {
         case 'ERROR':

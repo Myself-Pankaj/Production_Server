@@ -5,6 +5,7 @@ import databaseService from './src/services/databaseService.js'
 import logger from './src/utils/logger.js'
 
 const server = app.listen(config.PORT)
+
 ;(async () => {
     try {
         // Connect to the database
@@ -16,7 +17,7 @@ const server = app.listen(config.PORT)
         })
 
         initRateLimiter(connection)
-        logger.info(`RATE_LIMITER_INITIATED`)
+        logger.info(`RATE_LIMITER_INITIATED`, { meta: { INFO: connection.name } })
 
         // Log application start
         logger.info('SERVER IS STARTED && HEALTHY = TRUE', {
