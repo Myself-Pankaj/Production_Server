@@ -2,6 +2,7 @@ export default {
     // 2xx: Success
     // General Success
     SUCCESS: '🎉 All done! Your request was a success.', // 200
+    CACHE_SUCCESS: '🎉 All set! Your request was a success.', // 200
 
     // Authentication Success
     LOGIN_SUCCESS: '🎉 Welcome back! You’ve successfully logged in.', // 200
@@ -44,8 +45,6 @@ export default {
     // Email Errors
     EMAIL_SEND_FAIL: (mailId) => `❌ Uh-oh! We couldn’t send an email to ${mailId}. Try again later.`, // 500
     FORGET_PASSWORD_EMAIL_FAIL: '❌ Couldn’t send the reset email. Please try again later.', // 500
-    FORGET_PASSWORD_FAIL: '❌ Failed to process your password reset request.', // 500
-    ACCOUNT_VERIFICATION_FAIL: '❌ Verification failed. Please try again.', // 400
 
     // Reusable Client Errors
     USER_NOT_FOUND: '⚠️ User not found. Please check your details and try again.', // 404
@@ -54,10 +53,19 @@ export default {
     OTP_EXPIRED: '⌛ OTP expired. Please sign up again.', // 400
 
     // 5xx: Server Errors
-    LOGOUT_FAILURE: '❌ Error during logout. Please try again.', // 500
-    PROFILE_UPDATE_FAIL: '❌ Profile update failed. Please try again.', // 500
-    PASSWORD_RESET_FAIL: '❌ Password reset failed. Please try again.', // 500
 
+    PROFILE_UPDATE_FAIL: '❌ Profile update eRROR:', // 500
+    PASSWORD_RESET_FAIL: '❌ Password reset eRROR:', // 500
+    USER_REGISTRATION_FAIL: '❌rEGISTRATION ERROR:',
+    ACCOUNT_VERIFICATION_FAIL: '❌ Verification ERROR:', // 400
+    LOGIN_FAIL: '❌LOGIN ERROR:',
+    LOGOUT_FAIL: '❌ LOGOUT ERROR:', // 500
+    FORGET_PASSWORD_FAIL: '❌ FORGET PASSWORD ERROR:', // 500
+    CAR_REGISTRATION_FAIL: '❌ CAB REGISTRATION ERROR:',
+    UPLOADING_ERROR: '❌ IMAGE UPLOADING ERROR:',
+    CAR_UPDATE_FAIL: '❌ CabUpdate ERROR:',
+    RATE_DEFINED_CABS: '❌ rATE DEFINED CABS ERROR:',
+    CAB_DELETE_FAIL: '❌ CAB DELTETION FAIL:',
     // Rate Limiting
     TOO_MANY_REQUESTS: '🚫 Whoa, slow down! You’re making requests too quickly. Take a breather.', // 429
 
@@ -67,5 +75,15 @@ export default {
     EMAIL_CLOSURE: '🔒 This OTP is secure and valid for 5 minutes only.', // Reusable for all OTP emails
     FORGET_PASSWORD_EMAIL_SUBJECT: '🔑 Reset Your Password',
     PASSWORD_CHANGE_EMAIL_SUBJECT: '🔒 Password Update Alert',
-    PASSWORD_RESET_CLOSURE: "🔒 Your password is secure. You're all set!"
+    PASSWORD_RESET_CLOSURE: `🔒 Your password is secure. You're all set!`,
+    CAB_REGISTRATION_EMAIL_SUBJECT: `🎉 New Car registered`,
+
+    //cab Model
+    UNAUTHORIZED_ACCESS: '❌ Access denied.',
+    MISSING_DETAILS: '❌ kINDLY PROVIDE ALL THE NECESSARY DETAILS.',
+    CAR_REGISTRATION_SUCCESS: 'Car registration success',
+
+    CAR_UPDATE_SUCCESS: 'Cab updated Successfully',
+    CAB_NOT_FOUND: 'Cab Not Found ',
+    CAB_DELETE_SUCCESS: 'Cab Deleted Successfully'
 }

@@ -63,7 +63,7 @@ export const register = async (req, res, next) => {
         sendToken(req, res, user, 201, responseMessage.ACCOUNT_VERIFICATION)
     } catch (error) {
         // Log other errors
-        logger.error('Registration error:', error)
+        logger.error(responseMessage.USER_REGISTRATION_FAIL, error)
         return httpError(next, error, req, 500)
     }
 }
@@ -114,8 +114,7 @@ export const verify = async (req, res, next) => {
             await sendMailWithRetry(
                 user.email,
                 responseMessage.ACCOUNT_VERIFICATION_SUCCESS_EMAIL_SUBJECT(user.username),
-                emails.VERIFICATION_SUCCESS_EMAIL(user.username),
-                `Congratulations ${user.username}! Your account has been successfully verified.`
+                emails.VERIFICATION_SUCCESS_EMAIL(user.username)
             )
         } catch (emailError) {
             logger.error(responseMessage.EMAIL_SEND_FAIL(user.email), { error: emailError })
@@ -151,7 +150,7 @@ export const login = async (req, res, next) => {
 
         sendToken(req, res, user, 201, responseMessage.LOGIN_SUCCESS)
     } catch (error) {
-        logger.error(responseMessage.ACCOUNT_VERIFICATION_FAIL, { meta: { error: error } })
+        logger.error(responseMessage.LOGIN_FAIL, { meta: { error: error } })
         httpError(next, error, req, 500)
     }
 }
@@ -179,7 +178,7 @@ export const logout = async (req, res, next) => {
         // Log the successful logout
         logger.info(`${req.user.username}  ${req.user._id} ${responseMessage.LOGOUT_SUCCESS}`)
     } catch (error) {
-        logger.error(responseMessage.LOGOUT_FAILURE, {
+        logger.error(responseMessage.LOGOUT_FAIL, {
             meta: error
         })
 
@@ -274,6 +273,7 @@ export const updatePassword = async (req, res, next) => {
         }
         httpResponse(req, res, 201, responseMessage.PASSWORD_UPDATE_SUCCESS)
     } catch (error) {
+        logger.error(responseMessage.PASSWORD_RESET_FAIL, { meta: { error: error } })
         httpError(next, error, req, 500)
     }
 }
@@ -349,11 +349,10 @@ export const resetPassword = async (req, res, next) => {
             await sendMailWithRetry(
                 user.email,
                 responseMessage.PASSWORD_RESET_SUCCESS_EMAIL_SUBJECT(user.username),
-                emails.RESET_PASSWORD_EMAIL(user.username),
-                responseMessage.PASSWORD_RESET_CLOSURE
+                emails.PASSWORD_UPDATE_SUCCESS_EMAIL(user.username)
             )
         } catch (emailError) {
-            logger.error(responseMessage.EMAIL_SEND_FAIL(user.email), { error: emailError })
+            logger.error(responseMessage.EMAIL_SEND_FAIL(user.email), { meta: { error: emailError } })
             // Note: We're continuing even if email fails, as the verification was successful
         }
 

@@ -7,12 +7,12 @@ import responseMessage from './src/constants/responseMessage.js'
 import { fileURLToPath } from 'url'
 import helmet from 'helmet'
 import corsOptions from './src/middlewares/corsMiddleware.js'
-import userRoute from './src/routes/userApiRoutes.js'
 import cookieParser from 'cookie-parser'
-import session from 'express-session'
-import config from './src/config/config.js'
-import { EApplicationEnvironment } from './src/constants/application.js'
 import fileUpload from 'express-fileupload'
+
+//Routes
+import userRoute from './src/routes/userApiRoutes.js'
+import cabRoute from './src/routes/cabApiRoutes.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -33,23 +33,29 @@ app.use(
     })
 )
 app.use(express.static(path.join(__dirname, 'public')))
-app.use(
-    session({
-        secret: config.SESSION_SECRET || 'temporary',
-        resave: false,
-        saveUninitialized: false,
+//Not using Session for now as implemented JWT //
+// app.use(
+//     session({
+//         store: MongoStore.create({
+//             mongoUrl: config.DB_URI, // MongoDB connection URL
+//             ttl: 14 * 24 * 60 * 60 // Sessions expire in 14 days
+//           }),
+//         secret: config.SESSION_SECRET || 'temporary',
+//         resave: false,
+//         saveUninitialized: false,
 
-        cookie: {
-            maxAge: 1000 * 60 * 60 * 2, // 1000ms * 60s * 60min * 2hrs
-            secure: config.ENV === EApplicationEnvironment.DEVELOPMENT ? false : true,
-            httpOnly: config.ENV === EApplicationEnvironment.DEVELOPMENT ? false : true,
-            sameSite: config.ENV === EApplicationEnvironment.DEVELOPMENT ? false : 'none'
-        }
-    })
-)
+//         cookie: {
+//             maxAge: 1000 * 60 * 60 * 2, // 1000ms * 60s * 60min * 2hrs
+//             secure: config.ENV === EApplicationEnvironment.DEVELOPMENT ? false : true,
+//             httpOnly: config.ENV === EApplicationEnvironment.DEVELOPMENT ? false : true,
+//             sameSite: config.ENV === EApplicationEnvironment.DEVELOPMENT ? false : 'none'
+//         }
+//     })
+// )
 
 app.use('/api/v1', router)
 app.use('/api/v1', userRoute)
+app.use('/api/v1', cabRoute)
 
 // 404 Error handler
 app.use((req, res, next) => {

@@ -2,12 +2,15 @@ import httpResponse from '../utils/httpResponse.js'
 import responseMessage from '../constants/responseMessage.js'
 import httpError from '../utils/httpError.js'
 import { getApplicationHealth, getSystemHealth } from '../utils/quicker.js'
+import CustomError from '../utils/customeError.js'
+import config from '../config/config.js'
+import logger from '../utils/logger.js'
+import axios from 'axios'
 
 export default {
     self: (req, res, next) => {
         try {
-            const token = 'Token'
-            httpResponse(req, res, 200, responseMessage.SUCCESS, null, token)
+            httpResponse(req, res, 200, responseMessage.SUCCESS, null, null)
         } catch (err) {
             httpError(next, err, req, 500)
         }
@@ -23,6 +26,50 @@ export default {
             httpResponse(req, res, 200, responseMessage.SUCCESS, healthData)
         } catch (err) {
             httpError(next, err, req, 500)
+        }
+    },
+    calculateDistance: async (req, res, next) => {
+        const { origin, destination } = req.query
+        // Check if both origin and destination are provided
+        if (!origin || !destination) {
+            return httpError(next, new CustomError('Origin and destination are required', 400), req, 400)
+        }
+        const apiKey = config.GOOGLE_MAPS_API_KEY
+
+        if (!apiKey) {
+            logger.error('Google Maps API key is missing from environment variables')
+            return httpError(next, new CustomError('Server configuration error', 500), req, 500)
+        }
+        try {
+            // Call Google Distance Matrix API
+            const response = await axios.get('https://maps.googleapis.com/maps/api/distancematrix/json', {
+                params: {
+                    origins: origin,
+                    destinations: destination,
+                    key: apiKey
+                }
+            })
+
+            const data = response.data
+
+            // Check if API response is valid and contains data
+            if (data.status === 'OK' && data.rows[0]?.elements[0]?.status === 'OK') {
+                const distance = data.rows[0].elements[0].distance.text
+                const duration = data.rows[0].elements[0].duration.text
+
+                // Return success response with distance and duration
+                httpResponse(req, res, 200, 'Distance and duration calculated successfully', { distance, duration }, null)
+            } else {
+                // Handle case where Google API responds with non-OK status
+                logger.warn('Unable to calculate distance: Invalid API response', { origin, destination, data })
+                return httpError(next, new CustomError('Unable to calculate distance', 400), req, 400)
+            }
+        } catch (error) {
+            // Log error details for debugging
+            logger.error('Error calculating distance from Google API', { origin, destination, error })
+
+            // Handle possible errors (like network issues or invalid API keys)
+            return httpError(next, new CustomError('An error occurred while fetching the distance', 500), req, 500)
         }
     }
 }

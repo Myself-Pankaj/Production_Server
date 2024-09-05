@@ -19,7 +19,7 @@ export default (req, res, responseStatusCode, responseMessage, data = null, toke
 
     // Log
     logger.info('CONTROLLER_RESPONSE', {
-        meta: response
+        meta: config.ENV !== EApplicationEnvironment.PRODUCTION ? response : responseMessage
     })
 
     // Production Env check

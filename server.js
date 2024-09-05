@@ -1,11 +1,11 @@
 import app from './app.js'
 import config from './src/config/config.js'
 import { initRateLimiter } from './src/config/rateLimiter.js'
+import { EApplicationEnvironment } from './src/constants/application.js'
 import databaseService from './src/services/databaseService.js'
 import logger from './src/utils/logger.js'
 
 const server = app.listen(config.PORT)
-
 ;(async () => {
     try {
         // Connect to the database
@@ -17,7 +17,7 @@ const server = app.listen(config.PORT)
         })
 
         initRateLimiter(connection)
-        logger.info(`RATE_LIMITER_INITIATED`, { meta: { INFO: connection.name } })
+        logger.info(`RATE_LIMITER_INITIATED`, { meta: { Status: config.ENV !== EApplicationEnvironment.PRODUCTION ? 'Deactivated' : 'Activated' } })
 
         // Log application start
         logger.info('SERVER IS STARTED && HEALTHY = TRUE', {

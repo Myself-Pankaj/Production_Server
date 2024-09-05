@@ -1,3 +1,4 @@
+// @ts-nocheck
 import jwt from 'jsonwebtoken'
 import config from '../config/config.js'
 import httpResponse from '../utils/httpResponse.js'
@@ -32,17 +33,14 @@ export const isAuthenticated = async (req, res, next) => {
             next()
         } catch (err) {
             if (err instanceof jwt.TokenExpiredError) {
-                // return res.status(401).json({ success: false, message: "Token expired" });
                 return httpResponse(req, res, 401, responseMessage.TOKEN_EXPIRED, null, null)
             }
             if (err instanceof jwt.JsonWebTokenError) {
-                // return res.status(401).json({ success: false, message: "Invalid token" });
                 return httpResponse(req, res, 401, responseMessage.INVALID_TOKEN, null, null)
             }
             throw err
         }
     } catch (error) {
-        // res.status(500).json({ success: false, message: "Internal server error" });
         httpError(next, error, req, 500)
     }
 }
