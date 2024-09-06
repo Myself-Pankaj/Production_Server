@@ -33,5 +33,8 @@ export default {
     RAZORPAY_API_SECRET: process.env.RAZORPAY_API_SECRET,
 
     //google map api key
-    GOOGLE_MAPS_API_KEY: process.env.GOOGLE_MAPS_API_KEY
+    GOOGLE_MAPS_API_KEY: process.env.GOOGLE_MAPS_API_KEY,
+
+    //order
+    HYBRID_PAYMENT_PERCENTAGE: process.env.HYBRID_PAYMENT_PERCENTAGE
 }

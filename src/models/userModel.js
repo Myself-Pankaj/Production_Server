@@ -60,6 +60,34 @@ const userSchema = new mongoose.Schema({
         enum: ['Passenger', 'Driver', 'Admin'],
         default: 'Passenger'
     },
+    wallet: {
+        balance: {
+            type: Number,
+            default: 0
+        },
+        currency: {
+            type: String,
+            default: 'INR'
+        },
+        transactionHistory: [
+            {
+                type: {
+                    type: String, // 'credit' or 'debit'
+                    enum: ['credit', 'debit'],
+                    required: true
+                },
+                amount: {
+                    type: Number,
+                    required: true
+                },
+                transactionDate: {
+                    type: Date,
+                    default: Date.now
+                },
+                description: String
+            }
+        ]
+    },
     otp: Number,
     otp_expiry: Date,
     otp_attempt: Number,

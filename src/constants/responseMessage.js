@@ -85,5 +85,20 @@ export default {
 
     CAR_UPDATE_SUCCESS: 'Cab updated Successfully',
     CAB_NOT_FOUND: 'Cab Not Found ',
-    CAB_DELETE_SUCCESS: 'Cab Deleted Successfully'
+    CAB_DELETE_SUCCESS: 'Cab Deleted Successfully',
+
+    //driver model
+    NO_DOCUMENTS_PROVIDED: 'No documents provided for upload.',
+    INVALID_DOCUMENT_FORMAT: 'Invalid document format. Only JPEG, PNG, and PDF files are allowed.',
+    FILE_TOO_LARGE: 'File size exceeds the 5MB limit.',
+    UPLOAD_FAIL: 'Failed to upload document.',
+    DOCUMENTS_UPLOADED_SUCCESS: 'Documents uploaded successfully.',
+    DOCUMENTS_UPLOAD_ERROR: 'Error occurred during document upload.',
+
+    //Order
+    ORDER_CREATED: 'Booking placed successfully,',
+    ORDER_NOT_FOUND: 'Order Not found',
+    PAYMENT_VERIFIED: 'Payment verified and booking Placed Successfully',
+    PAYMENT_VERIFICATION_FAIL: (orderId) =>
+        `Payment verification  for ${orderId} fail if your amount is decuted it will refud back within 2 to 3 working days`
 }

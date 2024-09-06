@@ -1,5 +1,5 @@
 import Razorpay from 'razorpay'
-import config from './config'
+import config from './config.js'
 
 const razorpayInstance = new Razorpay({
     key_id: config.RAZORPAY_API_KEY,

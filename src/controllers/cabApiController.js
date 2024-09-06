@@ -254,7 +254,6 @@ export const getSingleCabs = async (req, res, next) => {
         // Return the response with the data
         httpResponse(req, res, 200, responseMessage.SUCCESS, cab, null)
     } catch (error) {
-        logger.error(responseMessage.CAB_NOT_FOUND, { meta: { error } })
         httpError(next, error, req, 500)
     }
 }
@@ -272,7 +271,10 @@ export const getDriverOwnedCabs = async (req, res, next) => {
         if (cachedDriverOwnsCab) {
             return httpResponse(req, res, 200, responseMessage.CACHE_SUCCESS, cachedDriverOwnsCab, null)
         }
-        const driverOwnsCab = await Cab.find({ belongsTo: req.user._id }).select('-_v').lean()
+        const driverOwnsCab = await Cab.find({ belongsTo: req.user._id })
+            .populate({ path: 'belongsTo', select: 'username email' })
+            .select('-__v')
+            .lean()
         // console.log(driverOwnsCab);
 
         if (driverOwnsCab.length === 0 || !driverOwnsCab) {
@@ -313,7 +315,7 @@ export const deleteCab = async (req, res, next) => {
         await Cab.deleteOne({ _id: id })
 
         // Invalidate all caches after cab deletion
-        await flushCache()
+        flushCache()
 
         // Check if the user has any remaining cabs and update user status if necessary
         const remainingCabs = await Cab.countDocuments({ belongsTo: req.user._id })

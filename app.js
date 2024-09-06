@@ -13,6 +13,8 @@ import fileUpload from 'express-fileupload'
 //Routes
 import userRoute from './src/routes/userApiRoutes.js'
 import cabRoute from './src/routes/cabApiRoutes.js'
+import driverRoute from './src/routes/driverApiRoutes.js'
+import orderRoute from './src/routes/orderApiRoutes.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -56,6 +58,8 @@ app.use(express.static(path.join(__dirname, 'public')))
 app.use('/api/v1', router)
 app.use('/api/v1', userRoute)
 app.use('/api/v1', cabRoute)
+app.use('/api/v1', driverRoute)
+app.use('/api/v1', orderRoute)
 
 // 404 Error handler
 app.use((req, res, next) => {
