@@ -100,5 +100,6 @@ export default {
     ORDER_NOT_FOUND: 'Order Not found',
     PAYMENT_VERIFIED: 'Payment verified and booking Placed Successfully',
     PAYMENT_VERIFICATION_FAIL: (orderId) =>
-        `Payment verification  for ${orderId} fail if your amount is decuted it will refud back within 2 to 3 working days`
-}
+        `Payment verification  for ${orderId} fail if your amount is decuted it will refud back within 2 to 3 working days`,
+    CAB_SET_RATE_SUCCESS: 'Cab rate set successfully and is now ready for bookings.'
+};

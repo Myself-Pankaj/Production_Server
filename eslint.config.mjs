@@ -1,24 +1,30 @@
-import globals from 'globals'
-import pluginJs from '@eslint/js'
-import eslintPluginPrettierRecommended from 'eslint-config-prettier'
 import jsdoc from 'eslint-plugin-jsdoc'
+import js from '@eslint/js'
+import globals from 'globals'
+import eslintConfigPrettier from 'eslint-config-prettier'
 export default [
+    { ignores: ['dist'] },
     {
+        files: ['**/*.{js,jsx}'],
         languageOptions: {
-            globals: { ...globals.browser, ...globals.node }
-        }
-    },
-    pluginJs.configs.recommended,
-    {
-        files: ['src/**/*.js', '*.js'],
+            ecmaVersion: 2020,
+            globals: { ...globals.browser, ...globals.node },
+            parserOptions: {
+                ecmaVersion: 'latest',
+                ecmaFeatures: { jsx: true },
+                sourceType: 'module'
+            }
+        },
+        settings: { react: { version: '18.3' } },
         plugins: {
             jsdoc
         },
         rules: {
+            ...js.configs.recommended.rules,
+            ...eslintConfigPrettier.rules,
             'no-console': 'error',
             'no-useless-catch': 0,
             quotes: ['error', 'single', { allowTemplateLiterals: true }]
         }
-    },
-    eslintPluginPrettierRecommended
+    }
 ]

@@ -1,8 +1,8 @@
-import config from '../config/config.js'
-import { EApplicationEnvironment } from '../constants/application.js'
-import logger from './logger.js'
+import config from '../config/config.js';
+import { EApplicationEnvironment } from '../constants/application.js';
+import logger from './logger.js';
 
-export default (req, res, responseStatusCode, responseMessage, data = null, token = null) => {
+export default (req, res, responseStatusCode, responseMessage, data = null, token = null, pagination = null) => {
     const response = {
         success: responseStatusCode < 400 ? true : false,
         statusCode: responseStatusCode,
@@ -14,21 +14,23 @@ export default (req, res, responseStatusCode, responseMessage, data = null, toke
 
         message: responseMessage,
         data: data,
-        token: token || null
-    }
+        token: token || null,
+        pagination: pagination || null
+    };
 
+    const metaData = config.ENV !== EApplicationEnvironment.PRODUCTION ? { responseMessage } : { responseMessage };
     // Log
     logger.info('CONTROLLER_RESPONSE', {
-        meta: config.ENV !== EApplicationEnvironment.PRODUCTION ? response : responseMessage
-    })
+        meta: metaData
+    });
 
     // Production Env check
     if (config.ENV === EApplicationEnvironment.PRODUCTION) {
-        delete response.request.ip
+        delete response.request.ip;
     }
 
-    res.status(responseStatusCode).json(response)
-}
+    res.status(responseStatusCode).json(response);
+};
 
 // 1xx Informational
 // 100 Continue: The server has received the initial part of the request and the client should proceed with the rest of the request.
