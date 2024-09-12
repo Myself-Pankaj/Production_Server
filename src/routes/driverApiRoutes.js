@@ -1,13 +1,25 @@
-import { Router } from 'express';
-import { isAuthenticated } from '../middlewares/authMiddleware.js';
-import { driverVerification, getDriverCompletedBookings } from '../controllers/driverApiController.js';
+import { Router } from 'express'
+import { isAuthenticated } from '../middlewares/authMiddleware.js'
+import {
+    cancelBooking,
+    confirmBooking,
+    driverVerification,
+    getDriverAllBookings,
+    getDriverUpcommingBookings
+} from '../controllers/driverApiController.js'
 
-const router = Router();
+const router = Router()
 
-router.route('/docVerification').put(isAuthenticated, driverVerification);
+router.route('/docVerification').put(isAuthenticated, driverVerification)
 
-// router.route('/getDriverUpcomingBookings').get(isAuthenticated, getDriverUpcomingBookings)
+router.route('/getDriverUpcomingBookings').get(isAuthenticated, getDriverUpcommingBookings)
 
-router.route('/getDriverCompletedBookings').get(isAuthenticated, getDriverCompletedBookings);
+router.route('/getDriverAllBookings').get(isAuthenticated, getDriverAllBookings)
 
-export default router;
+router.route('/confirm-driver-booking').put(isAuthenticated, confirmBooking)
+
+router.route('/confirm-driver-booking').put(isAuthenticated, confirmBooking)
+
+router.route('/cancel-driver-booking').put(isAuthenticated, cancelBooking)
+
+export default router

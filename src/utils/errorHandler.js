@@ -3,7 +3,7 @@ import config from '../config/config.js'
 import { EApplicationEnvironment } from '../constants/application.js'
 import logger from './logger.js'
 
-export default (err, req, errorStatusCode = 500) => {
+export default (controller, err, req, errorStatusCode = 500) => {
     const errorObj = {
         success: false,
         statusCode: err.statusCode || errorStatusCode,
@@ -18,7 +18,7 @@ export default (err, req, errorStatusCode = 500) => {
     }
 
     // Log
-    logger.error('CONTROLLER_ERROR', {
+    logger.error(`${controller} CONTROLLER`, {
         meta: errorObj
     })
 

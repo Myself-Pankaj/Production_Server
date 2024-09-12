@@ -1,192 +1,330 @@
-import responseMessage from '../constants/responseMessage.js';
-import { User } from '../models/userModel.js';
-import { delCache } from '../services/cacheService.js';
-import httpResponse from '../utils/httpResponse.js';
-import fs from 'fs';
-import logger from '../utils/logger.js';
-import CustomError from '../utils/customeError.js';
-import cloudinary from '../config/cloudinary.js';
-import httpError from '../utils/httpError.js';
-import mongoose from 'mongoose';
-import { Cab } from '../models/cabModel.js';
+import responseMessage from '../constants/responseMessage.js'
+import { User } from '../models/userModel.js'
+import { delCache } from '../services/cacheService.js'
+import httpResponse from '../utils/httpResponse.js'
+import fs from 'fs'
+import logger from '../utils/logger.js'
+import CustomError from '../utils/customeError.js'
+import cloudinary from '../config/cloudinary.js'
+import httpError from '../utils/httpError.js'
+import mongoose, { startSession } from 'mongoose'
+import { Cab } from '../models/cabModel.js'
+import { Order } from '../models/orderModel.js'
+import { sendMailWithRetry } from '../services/emailServices.js'
+import emails from '../constants/emails.js'
 
 export const driverVerification = async (req, res, next) => {
-    const tmpDir = './tmp';
-    const session = await mongoose.startSession(); // Start MongoDB session
-    session.startTransaction(); // Start a transaction
+    const tmpDir = './tmp'
+    const session = await mongoose.startSession()
+    session.startTransaction()
 
     try {
-        // Invalidate cache for user and driver data
-        delCache(['all_user', 'all_drivers']);
+        delCache(['all_user', 'all_drivers'])
 
-        // Ensure only drivers can access this route
         if (req.user.role !== 'Driver') {
-            return httpResponse(req, res, 403, responseMessage.UNAUTHORIZED_ACCESS, null, null);
+            throw new CustomError(responseMessage.UNAUTHORIZED_ACCESS, 403)
         }
 
-        const user = await User.findById(req.user._id).session(session);
+        const user = await User.findById(req.user._id).session(session)
         if (!user) {
-            throw new CustomError(responseMessage.USER_NOT_FOUND, 404);
+            throw new CustomError(responseMessage.RESOURCE_NOT_FOUND('User'), 404)
         }
-
-        // Ensure temporary directory exists for storing file uploads
 
         await fs.promises.mkdir(tmpDir, { recursive: true }).catch((error) => {
-            logger.error(`Failed to create temp directory:`, { meta: { error } });
-            throw new CustomError('Failed to create temp directory', 500);
-        });
+            logger.error(`Failed to create temp directory:`, { meta: { error } })
+            throw new CustomError('Failed to create temp directory', 500)
+        })
 
-        // Check if documents were provided in the request
         if (!req.files || !req.files.document) {
-            throw new CustomError(responseMessage.NO_DOCUMENTS_PROVIDED, 400);
+            throw new CustomError(responseMessage.INVALID_DOCUMENT_FORMAT, 400)
         }
 
-        const documents = Array.isArray(req.files.document) ? req.files.document : [req.files.document];
-        const docNames = Array.isArray(req.body.docName) ? req.body.docName : [req.body.docName];
+        const documents = Array.isArray(req.files.document) ? req.files.document : [req.files.document]
+        const docNames = Array.isArray(req.body['docName[]']) ? req.body['docName[]'] : [req.body['docName[]']]
 
-        // Validate the uploaded files (e.g., max size, allowed formats)
-        const allowedFormats = ['image/jpeg', 'image/png', 'application/pdf'];
+        const allowedFormats = ['image/jpeg', 'image/png', 'application/pdf']
         documents.forEach((doc) => {
             if (!allowedFormats.includes(doc.mimetype)) {
-                throw new CustomError(responseMessage.INVALID_DOCUMENT_FORMAT, 400);
+                throw new CustomError(responseMessage.INVALID_DOCUMENT_FORMAT, 400)
             }
             if (doc.size > 2 * 1024 * 1024) {
-                // Max 2MB per document
-                throw new CustomError(responseMessage.FILE_TOO_LARGE, 400);
+                throw new CustomError(responseMessage.DOCUMENT_TOO_LARGE, 400)
             }
-        });
+        })
 
         const uploadedDocuments = await Promise.all(
             documents.map(async (doc, index) => {
                 try {
-                    // Upload documents to Cloudinary
                     const uploadResult = await cloudinary.v2.uploader.upload(doc.tempFilePath, {
                         folder: 'TandT/DriverDocuments',
                         resource_type: 'auto'
-                    });
-                    // Remove the temp file after upload
-                    fs.unlinkSync(doc.tempFilePath);
+                    })
+                    fs.unlinkSync(doc.tempFilePath)
 
                     return {
                         docName: docNames[index] || `Document ${index + 1}`,
                         public_id: uploadResult.public_id,
                         url: uploadResult.secure_url,
                         uploadedAt: new Date()
-                    };
+                    }
                 } catch (uploadError) {
-                    logger.error(`Document upload failed: ${doc.name}`, { meta: { error: uploadError } });
-                    throw new CustomError(responseMessage.UPLOAD_FAIL, 500);
+                    logger.error(`Document upload failed: ${doc.name}`, { meta: { error: uploadError } })
+                    throw new CustomError(responseMessage.DOCUMENT_UPLOAD_FAILURE, 500)
                 }
             })
-        );
+        )
 
-        // Append the uploaded documents to the user's driver documents
-        user.driverDocuments.push(...uploadedDocuments);
-        user.isDocumentSubmited = true;
-        await user.save({ session }); // Save the user within the session
+        user.driverDocuments.push(...uploadedDocuments)
+        user.isDocumentSubmited = true
 
-        // Commit the transaction
-        await session.commitTransaction();
+        const accNo = req.body['bankDetails[accNo]']
+        const ifsc = req.body['bankDetails[ifsc]']
+        const bankName = req.body['bankDetails[bankName]']
 
-        // Send success response
-        return httpResponse(req, res, 200, responseMessage.DOCUMENTS_UPLOADED_SUCCESS, uploadedDocuments, null);
+        if (!accNo || !ifsc || !bankName) {
+            throw new CustomError(responseMessage.MISSING_BANK_DETAILS, 400)
+        }
+
+        if (!/^\d+$/.test(accNo) || !/^[A-Za-z]{4}[0-9]{7}$/.test(ifsc)) {
+            throw new CustomError(responseMessage.INVALID_BANK_DETAILS, 400)
+        }
+
+        user.wallet = user.wallet || {}
+        user.wallet.bankDetails = {
+            accNo: parseInt(accNo, 10), // Convert to Number as per schema
+            ifsc: ifsc,
+            bankName: bankName
+        }
+
+        // If the user doesn't have a wallet, initialize it
+        if (!user.wallet.balance) {
+            user.wallet.balance = 0
+        }
+        if (!user.wallet.currency) {
+            user.wallet.currency = 'INR'
+        }
+        await user.save({ session })
+
+        await session.commitTransaction()
+
+        return httpResponse(req, res, 200, responseMessage.DOCUMENT_UPLOAD_SUCCESS, uploadedDocuments, null)
     } catch (error) {
-        // Abort the transaction on error
-        await session.abortTransaction();
-        logger.error(responseMessage.DOCUMENTS_UPLOAD_ERROR, { meta: { error } });
-        httpError(next, error, req, 500);
+        await session.abortTransaction()
+        httpError('DOCUMENT VERIFICATION', next, error, req, 500)
     } finally {
-        // End the session
-        session.endSession();
+        session.endSession()
 
-        // Clean up temporary files directory after operation
         if (fs.existsSync(tmpDir)) {
-            await fs.promises.rm(tmpDir, { recursive: true });
+            await fs.promises.rm(tmpDir, { recursive: true })
         }
     }
-};
-//     //Not Used
-// export const getDriverUpcomingBookings = async (req, res, next) => {
-//     try {
-//         // Ensure the user is authorized
-//         if (req.user.role !== 'Driver' && req.user.role !== 'Admin') {
-//             return httpResponse(req, res, 403, responseMessage.UNAUTHORIZED_ACCESS, null, null)
-//         }
-//         const driverId = req.user._id
+}
 
-//         // Find the driver's cabs
-//         const driverCabs = await Cab.find({ belongsTo: driverId }).select('_id')
-//         if (driverCabs.length === 0) {
-//             throw new CustomError(responseMessage.CAB_NOT_FOUND, 404)
-//         }
-
-//         // Separate into assigning and confirmed bookings
-//         const assigningBookings = upcomingBookings.filter((booking) => booking.bookingStatus === 'Assigning')
-//         const confirmedBookings = upcomingBookings.filter((booking) => booking.bookingStatus === 'Confirmed')
-
-//         return httpResponse(
-//             req,
-//             res,
-//             200,
-//             responseMessage.SUCCESS,
-//             {
-//                 assigningCount: assigningBookings.length,
-//                 confirmedCount: confirmedBookings.length,
-//                 bookingData: { assigning: assigningBookings, confirmed: confirmedBookings }
-//             },
-//             null
-//         )
-//     } catch (error) {
-//         logger.error(responseMessage.BOOKINGS_FETCH_FAIL, { meta: { error } })
-//         return httpError(next, error, req, 500)
-//     }
-// }
-
-export const getDriverCompletedBookings = async (req, res, next) => {
+export const getDriverUpcommingBookings = async (req, res, next) => {
     try {
         // Ensure the user is authorized
         if (req.user.role !== 'Driver' && req.user.role !== 'Admin') {
-            return httpResponse(req, res, 403, responseMessage.UNAUTHORIZED_ACCESS, null, null);
+            throw new CustomError(responseMessage.UNAUTHORIZED_ACCESS, 403)
         }
 
-        const driverId = req.user._id;
+        const driverId = req.user._id
 
+        // Find the cabs that belong to the driver
         const driverCabs = await Cab.find({ belongsTo: driverId })
             .populate({
                 path: 'upcomingBookings',
                 populate: {
-                    path: 'orderId', // Populate the 'orderId' field within upcomingBookings
-                    select: 'userId bookingType departureDate dropOffDate pickupLocation exactLocation destination numberOfPassengers bookingStatus paymentMethod driverShare bookingAmount paidAmount',
+                    path: 'orderId',
+                    select: 'bookingType pickupLocation exactLocation destination',
                     populate: {
-                        path: 'userId', // Populate the user information within the order
-                        select: 'firstName lastName' // Select the fields you need
+                        path: 'userId',
+                        select: 'username email phoneNumber'
                     }
                 }
             })
-            .select('_id upcomingBookings');
-        if (driverCabs.length === 0) {
-            return httpResponse(req, res, 404, responseMessage.CAB_NOT_FOUND, null, null);
+            .select('_id upcomingBookings')
+
+        // Arrays to hold filtered bookings
+        let acceptedBookings = []
+        let unacceptedBookings = []
+
+        driverCabs.forEach((cab) => {
+            const { upcomingBookings } = cab
+            if (upcomingBookings && upcomingBookings.length > 0) {
+                upcomingBookings.forEach((booking) => {
+                    const bookingObject = {
+                        cabId: cab._id,
+                        ...booking.toObject() // Convert Mongoose document to plain object
+                    }
+                    if (booking.accepted) {
+                        acceptedBookings.push(bookingObject)
+                    } else {
+                        unacceptedBookings.push(bookingObject)
+                    }
+                })
+            }
+        })
+
+        // Check if there are any bookings to return
+        if (acceptedBookings.length === 0 && unacceptedBookings.length === 0) {
+            return httpResponse(req, res, 404, responseMessage.RESOURCE_NOT_FOUND('Cab'), null, null)
         }
-        // Fetch Completed bookings
-        const upcomingBookings = driverCabs.flatMap((cab) => cab.upcomingBookings);
 
-        // Separate into assigning and confirmed bookings
-        const assigningBookings = upcomingBookings.filter((booking) => booking.bookingStatus === 'Assigning');
-        const confirmedBookings = upcomingBookings.filter((booking) => booking.bookingStatus === 'Confirmed');
-
-        return httpResponse(
-            req,
-            res,
-            200,
-            responseMessage.SUCCESS,
-            {
-                assigningCount: assigningBookings.length,
-                confirmedCount: confirmedBookings.length,
-                bookingData: { assigning: assigningBookings, confirmed: confirmedBookings }
-            },
-            null
-        );
+        // Return both accepted and unaccepted bookings
+        return httpResponse(req, res, 200, responseMessage.OPERATION_SUCCESS, { acceptedBookings, unacceptedBookings }, null)
     } catch (error) {
-        return httpError(next, error, req, 500);
+        return httpError('getDriverUpcomingBookings', next, error, req, 500)
     }
-};
+}
+
+export const confirmBooking = async (req, res, next) => {
+    const session = await startSession()
+    session.startTransaction()
+    try {
+        if (req.user.role !== 'Driver' && req.user.role !== 'Admin') {
+            throw new CustomError(responseMessage.UNAUTHORIZED_ACCESS, 403)
+        }
+
+        const { orderId } = req.body
+
+        if (!orderId) {
+            throw new CustomError('Order ID is required to confirm the booking', 400)
+        }
+
+        const order = await Order.findByIdAndUpdate(orderId, { bookingStatus: 'Confirmed' }, { new: true, runValidators: true }).populate({
+            path: 'userId',
+            select: 'username email phoneNumber'
+        })
+
+        if (!order) {
+            throw new CustomError(responseMessage.RESOURCE_NOT_FOUND('Order'), 404)
+        }
+        //send an email to your
+        try {
+            await sendMailWithRetry(
+                order.userId.email,
+                responseMessage.BOOKING_CONFIRMED_EMAIL_SUBJECT,
+                emails.BOOKING_CONFIRMED_EMAIL(order.userId.username)
+            )
+        } catch (emailError) {
+            logger.error(responseMessage.EMAIL_SENDING_FAILED(order.userId.email), { error: emailError })
+            // Continue even if email fails, but log the error
+        }
+        await delCache(['pending_orders', 'all_bookings'])
+
+        await session.commitTransaction()
+        session.endSession()
+        httpResponse(req, res, 200, responseMessage.OPERATION_SUCCESS, null, null, null)
+    } catch (error) {
+        await session.abortTransaction()
+        session.endSession()
+        httpError('CONFIRM BOOKING', next, error, req, 500)
+    }
+}
+export const getDriverAllBookings = async (req, res, next) => {
+    try {
+        // Check user role
+        if (req.user.role !== 'Driver' && req.user.role !== 'Admin') {
+            throw new CustomError(responseMessage.UNAUTHORIZED_ACCESS, 403)
+        }
+
+        // Pagination setup
+        const page = parseInt(req.query.page) || 1
+        const limit = parseInt(req.query.limit) || 5
+
+        // Validation for pagination
+        if (page < 1 || limit < 1) {
+            throw new CustomError('Pagination Error', 400)
+        }
+
+        const skip = (page - 1) * limit
+        const userId = req.user._id
+
+        // Fetch driver orders
+        const driverOrders = await Order.find({ driverId: userId, bookingStatus: 'Completed' }).sort({ createdAt: -1 }).skip(skip).limit(limit).lean()
+
+        // If no orders found
+        if (!driverOrders || driverOrders.length === 0) {
+            return httpResponse(req, res, 404, responseMessage.RESOURCE_NOT_FOUND('No orders found for this driver'), null, null, null)
+        }
+
+        // Count total orders for pagination
+        const totalDriverOrders = await Order.countDocuments({ driverId: userId })
+
+        // Pagination info
+        const pagination = {
+            currentPage: page,
+            totalPages: Math.ceil(totalDriverOrders / limit),
+            totalItems: totalDriverOrders
+        }
+
+        // Successful response with orders and pagination info
+        httpResponse(req, res, 200, responseMessage.OPERATION_SUCCESS, driverOrders, null, pagination)
+    } catch (error) {
+        httpError('GET ALL DRIVER BOOKING', next, error, req, 500)
+    }
+}
+
+export const cancelBooking = async (req, res, next) => {
+    const session = await startSession()
+    session.startTransaction()
+    try {
+        if (req.user.role !== 'Driver' && req.user.role !== 'Admin') {
+            throw new CustomError(responseMessage.UNAUTHORIZED_ACCESS, 403)
+        }
+
+        const { orderId } = req.body
+
+        if (!orderId) {
+            throw new CustomError('Order ID is required to confirm the booking', 400)
+        }
+
+        // Find the order
+        const order = await Order.findById(orderId).session(session)
+        if (!order) {
+            throw new CustomError(responseMessage.RESOURCE_NOT_FOUND('Order'), 404)
+        }
+        // Find the cab associated with the order and remove the booking
+        if (order.bookedCab) {
+            const cab = await Cab.findById(order.bookedCab).session(session)
+            if (!cab) {
+                throw new CustomError(responseMessage.RESOURCE_NOT_FOUND('Cab'), 404)
+            }
+            cab.removeBooking(orderId)
+            await cab.save({ session })
+        }
+
+        // Update the order status and remove all driver-related information
+        const updateResult = await Order.updateOne(
+            { _id: orderId },
+            {
+                $set: {
+                    bookingStatus: 'Pending',
+                    driverId: null
+                },
+                $unset: {
+                    driverShare: '',
+                    driverCut: '',
+                    driverStatus: ''
+                    // Add any other fields you want to remove
+                }
+            },
+            { session, runValidators: true }
+        )
+
+        if (updateResult.modifiedCount === 0) {
+            throw new CustomError('Failed to update order', 500)
+        }
+        // Clear cache
+        await delCache(['pending_orders', 'all_bookings'])
+
+        await session.commitTransaction()
+        session.endSession()
+
+        httpResponse(req, res, 201, responseMessage.OPERATION_SUCCESS, null, null, null)
+    } catch (error) {
+        await session.abortTransaction()
+        session.endSession()
+        httpError('CANCEL BOOKING', next, error, req, 500)
+    }
+}

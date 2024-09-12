@@ -1,36 +1,36 @@
-import httpResponse from '../utils/httpResponse.js';
-import responseMessage from '../constants/responseMessage.js';
-import httpError from '../utils/httpError.js';
-import { User } from '../models/userModel.js';
-import config from '../config/config.js';
-import { generateNumericOTP } from '../utils/otherUtils.js';
-import emails from '../constants/emails.js';
-import { sendMailWithRetry } from '../services/emailServices.js';
-import logger from '../utils/logger.js';
-import { sendToken } from '../services/tokenServices.js';
-import cloudinary from '../config/cloudinary.js';
-import fs from 'fs';
-import CustomError from '../utils/customeError.js';
+import httpResponse from '../utils/httpResponse.js'
+import responseMessage from '../constants/responseMessage.js'
+import httpError from '../utils/httpError.js'
+import { User } from '../models/userModel.js'
+import config from '../config/config.js'
+import { generateNumericOTP } from '../utils/otherUtils.js'
+import emails from '../constants/emails.js'
+import { sendMailWithRetry } from '../services/emailServices.js'
+import logger from '../utils/logger.js'
+import { sendToken } from '../services/tokenServices.js'
+import cloudinary from '../config/cloudinary.js'
+import fs from 'fs'
+import CustomError from '../utils/customeError.js'
 
 export const register = async (req, res, next) => {
     try {
-        const { username, email, password, phoneNumber, role } = req.body;
+        const { username, email, password, phoneNumber, role } = req.body
         // Check if user already exists
-        let existingUser = await User.findOne({ $or: [{ email }, { phoneNumber }] });
+        let existingUser = await User.findOne({ $or: [{ email }, { phoneNumber }] })
 
         if (existingUser) {
-            throw new CustomError(responseMessage.USER_ALREADY_EXIST, 409);
+            throw new CustomError(responseMessage.USER_ALREADY_REGISTERED, 409)
         }
 
         // Generate OTP
-        const otp = generateNumericOTP(config.OTP_LENGTH);
-        const otpExpireMinutes = parseInt(config.OTP_EXPIRE, 10);
+        const otp = generateNumericOTP(config.OTP_LENGTH)
+        const otpExpireMinutes = parseInt(config.OTP_EXPIRE, 10)
         if (isNaN(otpExpireMinutes)) {
-            throw new CustomError('Error in genrating otp', 500);
+            throw new CustomError('Error in genrating otp', 500)
         }
-        const otpExpiryDate = new Date(Date.now() + otpExpireMinutes * 60 * 1000);
+        const otpExpiryDate = new Date(Date.now() + otpExpireMinutes * 60 * 1000)
 
-        let user;
+        let user
         // Create user
         user = await User.create({
             username,
@@ -41,119 +41,111 @@ export const register = async (req, res, next) => {
             otp,
             otp_attempt: 0,
             otp_expiry: otpExpiryDate
-        });
+        })
         // Send verification email
 
         try {
-            await sendMailWithRetry(
-                email,
-                responseMessage.ACCOUNT_VERIFICATION_EMAIL_SUBJECT,
-                emails.REGISTRATION_EMAIL(username, otp),
-                responseMessage.ACCOUNT_VERIFICATION_EMAIL_CLOSURE
-            );
+            await sendMailWithRetry(email, responseMessage.VERIFY_ACCOUNT_EMAIL_SUBJECT, emails.REGISTRATION_EMAIL(username, otp))
         } catch (emailError) {
-            logger.error(responseMessage.EMAIL_SEND_FAIL(email), emailError);
+            logger.error(responseMessage.EMAIL_SEND_FAIL(email), emailError)
 
-            return httpResponse(req, res, 503, responseMessage.EMAIL_SEND_FAIL(email));
+            return httpResponse(req, res, 503, responseMessage.EMAIL_SEND_FAIL(email))
         }
         // Clear cache if needed
         // Cachestorage.del(['all_user', 'all_drivers']);
 
         // Send response with token
-        sendToken(req, res, user, 201, responseMessage.ACCOUNT_VERIFICATION);
+        sendToken(req, res, user, 201, responseMessage.ACCOUNT_VERIFICATION)
     } catch (error) {
         // Log other errors
-        logger.error(responseMessage.USER_REGISTRATION_FAIL, error);
-        return httpError(next, error, req, 500);
+        return httpError('ACCOUNT REGISTRATION', next, error, req, 500)
     }
-};
+}
 
-const MAX_OTP_ATTEMPTS = 5;
+const MAX_OTP_ATTEMPTS = 5
 
 export const verify = async (req, res, next) => {
     try {
-        const { otp } = req.body;
+        const { otp } = req.body
         // Input validation
 
-        const numericOTP = Number(otp);
+        const numericOTP = Number(otp)
 
-        const user = await User.findById(req.user._id);
+        const user = await User.findById(req.user._id)
         if (!user) {
             // return httpResponse(req, res, 404, responseMessage.USER_NOT_FOUND, null, null)
-            throw new CustomError(responseMessage.USER_NOT_FOUND, 404);
+            throw new CustomError(responseMessage.RESOURCE_NOT_FOUND('User'), 404)
         }
         // Check if user is already verified
         if (user.isVerified) {
-            throw new CustomError(responseMessage.ALREADY_VERIFIED, 409);
+            throw new CustomError(responseMessage.USER_ALREADY_REGISTERED, 409)
         }
         // Check if user has exceeded maximum attempts
         if (user.otp_attempt >= MAX_OTP_ATTEMPTS) {
-            throw new CustomError(responseMessage.MAX_OTP_ATTEMPTS_EXCEEDED, 429);
+            throw new CustomError(responseMessage.OTP_TOO_MANY_ATTEMPTS, 429)
         }
         // OTP validation
         if (user.otp !== numericOTP) {
-            user.otp_attempt += 1;
-            await user.save();
+            user.otp_attempt += 1
+            await user.save()
             if (user.otp_attempt >= MAX_OTP_ATTEMPTS) {
-                throw new CustomError(responseMessage.MAX_OTP_ATTEMPTS_EXCEEDED, 429);
+                throw new CustomError(responseMessage.OTP_TOO_MANY_ATTEMPTS, 429)
             }
-            throw new CustomError(responseMessage.INVALID_OTP(MAX_OTP_ATTEMPTS - user.otp_attempt), 400);
+            throw new CustomError(responseMessage.OTP_INCORRECT(MAX_OTP_ATTEMPTS - user.otp_attempt), 400)
         }
         // OTP expiration check
         if (user.otp_expiry < Date.now()) {
-            throw new CustomError(responseMessage.OTP_EXPIRED, 400);
+            throw new CustomError(responseMessage.OTP_EXPIRED, 400)
         }
         // Update user
-        user.isVerified = true;
-        user.otp = null;
-        user.otp_expiry = null;
-        user.otp_attempt = 0; // Reset attempts on successful verification
-        await user.save();
+        user.isVerified = true
+        user.otp = null
+        user.otp_expiry = null
+        user.otp_attempt = 0 // Reset attempts on successful verification
+        await user.save()
         // Send email notification
         try {
             await sendMailWithRetry(
                 user.email,
-                responseMessage.ACCOUNT_VERIFICATION_SUCCESS_EMAIL_SUBJECT(user.username),
+                responseMessage.ACCOUNT_VERIFICATION_EMAIL_SUBJECT(user.username),
                 emails.VERIFICATION_SUCCESS_EMAIL(user.username)
-            );
+            )
         } catch (emailError) {
-            logger.error(responseMessage.EMAIL_SEND_FAIL(user.email), { error: emailError });
+            logger.error(responseMessage.EMAIL_SENDING_FAILED(user.email), { error: emailError })
             // Note: We're continuing even if email fails, as the verification was successful
         }
         // Send token and success response
-        sendToken(req, res, user, 200, responseMessage.ACCOUNT_VERIFICATION_SUCCESS);
+        sendToken(req, res, user, 200, responseMessage.ACCOUNT_VERIFIED)
     } catch (error) {
-        logger.error(responseMessage.ACCOUNT_VERIFICATION_FAIL, { meta: { error: error } });
-        httpError(next, error, req, 500);
+        httpError('ACCOUNT VERIFICATION', next, error, req, 500)
     }
-};
+}
 
 export const login = async (req, res, next) => {
     try {
-        const { email, password } = req.body;
+        const { email, password } = req.body
 
         if (!email || !password) {
-            throw new CustomError(responseMessage.INVALID_FORMAT, 400);
+            throw new CustomError(responseMessage.INVALID_INPUT_DATA, 400)
         }
 
-        const user = await User.findOne({ email }).select('+password');
+        const user = await User.findOne({ email }).select('+password')
 
         if (!user) {
-            throw new CustomError(responseMessage.INVALID_LOGIN, 401);
+            throw new CustomError(responseMessage.INVALID_REQUEST, 401)
         }
 
-        const isMatch = await user.verifyPassword(password);
+        const isMatch = await user.verifyPassword(password)
 
         if (!isMatch) {
-            throw new CustomError(responseMessage.INVALID_LOGIN, 401);
+            throw new CustomError(responseMessage.INVALID_REQUEST, 401)
         }
 
-        sendToken(req, res, user, 201, responseMessage.LOGIN_SUCCESS);
+        sendToken(req, res, user, 201, responseMessage.LOGIN_SUCCESS)
     } catch (error) {
-        logger.error(responseMessage.LOGIN_FAIL, { meta: { error: error } });
-        httpError(next, error, req, 500);
+        httpError('LOGIN', next, error, req, 500)
     }
-};
+}
 
 export const logout = async (req, res, next) => {
     try {
@@ -170,233 +162,212 @@ export const logout = async (req, res, next) => {
                 secure: config.ENV === 'production',
                 sameSite: 'strict'
             })
-            .clearCookie('auth_error'); // Clear the error cookie if it exists
+            .clearCookie('auth_error') // Clear the error cookie if it exists
 
         // Send success response
-        httpResponse(req, res, 201, responseMessage.LOGOUT_SUCCESS, null, null);
+        httpResponse(req, res, 201, responseMessage.LOGOUT_SUCCESS, null, null)
 
         // Log the successful logout
-        logger.info(`${req.user.username}  ${req.user._id} ${responseMessage.LOGOUT_SUCCESS}`);
+        logger.info(`${req.user.username}  ${req.user._id} ${responseMessage.LOGOUT_SUCCESS}`)
     } catch (error) {
-        logger.error(responseMessage.LOGOUT_FAIL, {
-            meta: error
-        });
-
-        // Use httpError utility to handle the error consistently
-        httpError(next, error, req, 500);
+        httpError(next, error, req, 500)
     }
-};
+}
 
 export const updateProfile = async (req, res, next) => {
     try {
-        const user = await User.findById(req.user._id);
+        const user = await User.findById(req.user._id)
         if (!user) {
-            throw new CustomError(responseMessage.USER_NOT_FOUND, 400);
+            throw new CustomError(responseMessage.RESOURCE_NOT_FOUND('User'), 400)
         }
-        const { name, phoneNo } = req.body;
+        const { name, phoneNo } = req.body
 
         if (name) {
-            user.username = name;
+            user.username = name
         }
         if (phoneNo) {
-            user.phoneNumber = phoneNo;
+            user.phoneNumber = phoneNo
         }
 
         if (req.files && req.files.avatar) {
-            const avatar = req.files.avatar;
+            const avatar = req.files.avatar
 
             // Delete old avatar from cloudinary if it exists
             if (user.avatar && user.avatar.public_id) {
-                await cloudinary.v2.uploader.destroy(user.avatar.public_id);
+                await cloudinary.v2.uploader.destroy(user.avatar.public_id)
             }
 
             // Upload new avatar
             const myCloud = await cloudinary.v2.uploader.upload(avatar.tempFilePath, {
                 folder: 'TandT',
                 resource_type: 'image'
-            });
+            })
 
             // Remove temporary file
-            fs.unlinkSync(avatar.tempFilePath);
+            fs.unlinkSync(avatar.tempFilePath)
 
             user.avatar = {
                 public_id: myCloud.public_id,
                 url: myCloud.secure_url
-            };
+            }
         }
         // Cachestorage.del(['all_user','all_drivers']);
 
-        await user.save();
+        await user.save()
 
-        httpResponse(req, res, 201, responseMessage.PROFILE_UPDATE_SUCCESS, user, null);
+        httpResponse(req, res, 201, responseMessage.PROFILE_UPDATE_SUCCESS, user, null)
     } catch (error) {
-        logger.error(responseMessage.PROFILE_UPDATE_FAIL, { meta: { error: error } });
-        httpError(next, error, req, 500);
+        httpError('UPDATE PROFILE', next, error, req, 500)
     }
-};
+}
 
 export const updatePassword = async (req, res, next) => {
     try {
-        const { oldPassword, newPassword } = req.body;
+        const { oldPassword, newPassword } = req.body
 
         if (!oldPassword || !newPassword) {
             // return res
             //   .status(400)
             //   .json({ success: false, message: "Please enter all fields" });
-            throw new CustomError(responseMessage.INVALID_FORMAT, 400);
+            throw new CustomError(responseMessage.INVALID_INPUT_DATA, 400)
         }
 
-        const user = await User.findById(req.user._id).select('+password');
+        const user = await User.findById(req.user._id).select('+password')
         if (!user) {
-            throw new CustomError(responseMessage.USER_NOT_FOUND, 400);
+            throw new CustomError(responseMessage.RESOURCE_NOT_FOUND('User'), 400)
         }
 
-        const isMatch = await user.verifyPassword(oldPassword);
+        const isMatch = await user.verifyPassword(oldPassword)
 
         if (!isMatch) {
-            throw new CustomError(responseMessage.PASSWORD_NOT_MATCHING, 400);
+            throw new CustomError(responseMessage.AUTHENTICATION_FAILED, 400)
         }
 
-        user.password = newPassword;
-        await user.save();
+        user.password = newPassword
+        await user.save()
         // Send email notification
         try {
             await sendMailWithRetry(
                 user.email,
-                responseMessage.PASSWORD_CHANGE_EMAIL_SUBJECT,
+                responseMessage.PASSWORD_RESET_EMAIL_SUBJECT,
                 emails.PASSWORD_UPDATE_SUCCESS_EMAIL(user.username),
                 `Congratulations ${user.username}! Your account has been successfully verified.`
-            );
+            )
         } catch (emailError) {
-            logger.error(responseMessage.EMAIL_SEND_FAIL(user.email), { error: emailError });
+            logger.error(responseMessage.EMAIL_SENDING_FAILED(user.email), { error: emailError })
             // Note: We're continuing even if email fails, as the verification was successful
         }
-        httpResponse(req, res, 201, responseMessage.PASSWORD_UPDATE_SUCCESS);
+        httpResponse(req, res, 201, responseMessage.PASSWORD_CHANGE_SUCCESS)
     } catch (error) {
-        logger.error(responseMessage.PASSWORD_RESET_FAIL, { meta: { error: error } });
-        httpError(next, error, req, 500);
+        httpError('UPDATE PASSWORD', next, error, req, 500)
     }
-};
+}
 
 export const forgetPassword = async (req, res, next) => {
     try {
-        const { email } = req.body;
+        const { email } = req.body
 
-        const user = await User.findOne({ email });
+        const user = await User.findOne({ email })
 
         if (!user) {
-            throw new CustomError(responseMessage.INVALID_EMAIL, 404);
+            throw new CustomError(responseMessage.INVALID_EMAIL, 404)
         }
 
         // Generate a random OTP
-        const otp = generateNumericOTP(config.OTP_LENGTH);
-        const otpExpireMinutes = parseInt(config.OTP_EXPIRE, 10);
+        const otp = generateNumericOTP(config.OTP_LENGTH)
+        const otpExpireMinutes = parseInt(config.OTP_EXPIRE, 10)
         if (isNaN(otpExpireMinutes)) {
-            throw new CustomError('Error Genrating OTP', 500);
+            throw new CustomError('Error Genrating OTP', 500)
         }
 
         // Set the OTP and its expiry in the user document
-        user.resetPasswordOtp = otp;
+        user.resetPasswordOtp = otp
 
-        user.resetPasswordOtpExpiry = new Date(Date.now() + otpExpireMinutes * 60 * 1000);
+        user.resetPasswordOtpExpiry = new Date(Date.now() + otpExpireMinutes * 60 * 1000)
 
         // Save the user document
-        await user.save();
+        await user.save()
 
         // Send the email containing the OTP
         try {
-            await sendMailWithRetry(
-                user.email,
-                responseMessage.FORGET_PASSWORD_EMAIL_SUBJECT,
-                emails.FORGOT_PASSWORD_EMAIL(user.username, otp),
-                responseMessage.EMAIL_CLOSURE
-            );
+            await sendMailWithRetry(user.email, responseMessage.VERIFY_ACCOUNT_EMAIL_SUBJECT, emails.FORGOT_PASSWORD_EMAIL(user.username, otp))
         } catch (emailError) {
-            logger.error(responseMessage.EMAIL_SEND_FAIL(user.email), { meta: { error: emailError } });
+            logger.error(responseMessage.EMAIL_SENDING_FAILED(user.email), { meta: { error: emailError } })
 
-            return httpResponse(req, res, 503, responseMessage.EMAIL_SEND_FAIL(email));
+            return httpResponse(req, res, 503, responseMessage.EMAIL_SEND_FAIL(email))
         }
-        httpResponse(req, res, 200, responseMessage.EMAIL_SEND_SUCCESS(user.email));
+        httpResponse(req, res, 200, responseMessage.EMAIL_SENT_SUCCESS(user.email))
     } catch (error) {
-        logger.error(responseMessage.FORGET_PASSWORD_FAIL, { meta: { error: error } });
-        httpError(next, error, req, 500);
+        httpError('FORGET PASSWORD', next, error, req, 500)
     }
-};
+}
 
 export const resetPassword = async (req, res, next) => {
     try {
-        const { otp, newPassword } = req.body;
+        const { otp, newPassword } = req.body
 
         const user = await User.findOne({
             resetPasswordOtp: otp,
             resetPasswordOtpExpiry: { $gt: Date.now() }
-        });
+        })
 
         if (!user) {
-            throw new CustomError(responseMessage.INVALID_OTP_FORMAT, 400);
+            throw new CustomError(responseMessage.INVALID_INPUT_DATA, 400)
         }
 
         // Set the new password and clear the OTP and its expiry
-        user.password = newPassword;
-        user.resetPasswordOtp = null;
-        user.resetPasswordOtpExpiry = null;
+        user.password = newPassword
+        user.resetPasswordOtp = null
+        user.resetPasswordOtpExpiry = null
 
         // Save the updated user document
-        await user.save();
+        await user.save()
 
         // Send email notification for successful password reset
         try {
-            await sendMailWithRetry(
-                user.email,
-                responseMessage.PASSWORD_RESET_SUCCESS_EMAIL_SUBJECT(user.username),
-                emails.PASSWORD_UPDATE_SUCCESS_EMAIL(user.username)
-            );
+            await sendMailWithRetry(user.email, responseMessage.VERIFY_ACCOUNT_EMAIL_SUBJECT, emails.PASSWORD_UPDATE_SUCCESS_EMAIL(user.username))
         } catch (emailError) {
-            logger.error(responseMessage.EMAIL_SEND_FAIL(user.email), { meta: { error: emailError } });
+            logger.error(responseMessage.EMAIL_SENDING_FAILED(user.email), { meta: { error: emailError } })
             // Note: We're continuing even if email fails, as the verification was successful
         }
 
-        httpResponse(req, res, 201, responseMessage.PASSWORD_RESET_SUCCESS, user, null);
+        httpResponse(req, res, 201, responseMessage.PASSWORD_RESET_SUCCESS, user, null)
     } catch (error) {
-        logger.error(responseMessage.PASSWORD_RESET_FAIL, { meta: { error: error } });
-        httpError(next, error, req, 500);
+        httpError('RESET PASSWORD', next, error, req, 500)
     }
-};
+}
 export const getProfileById = async (req, res, next) => {
     try {
         // Extracting ID from request body
-        const { id } = req.params;
+        const { id } = req.params
 
         // Ensure the ID is provided
         if (!id) {
-            throw new CustomError(responseMessage.INVALID_FORMAT, 400);
+            throw new CustomError(responseMessage.INVALID_INPUT_DATA, 400)
         }
 
-        const user = await User.findById(id);
+        const user = await User.findById(id)
 
         if (!user) {
             // Handle the case where no user is found
-            throw new CustomError(responseMessage.USER_NOT_FOUND, 400);
+            throw new CustomError(responseMessage.RESOURCE_NOT_FOUND('User'), 400)
         }
-        httpResponse(req, res, 200, responseMessage.SUCCESS, user, null);
-        //   res.status(200).json({ success: true, user });
+        httpResponse(req, res, 200, responseMessage.OPERATION_SUCCESS, user, null)
     } catch (error) {
         // Catch any unexpected errors
-        logger.error(responseMessage.USER_NOT_FOUND, { meta: { error: error } });
-        httpError(next, error, req, 500);
+        httpError('PROFILE BY ID', next, error, req, 500)
     }
-};
+}
 
 export const myProfile = async (req, res, next) => {
     try {
-        const user = await User.findById(req.user._id);
+        const user = await User.findById(req.user._id)
         if (!user) {
             // Handle the case where no user is found
-            throw new CustomError(responseMessage.USER_NOT_FOUND, 400);
+            throw new CustomError(responseMessage.RESOURCE_NOT_FOUND('User'), 400)
         }
-        httpResponse(req, res, 200, responseMessage.SUCCESS, user, null);
+        httpResponse(req, res, 200, responseMessage.OPERATION_SUCCESS, user, null)
     } catch (error) {
-        logger.error(responseMessage.USER_NOT_FOUND, { meta: { error: error } });
-        httpError(next, error, req, 500);
+        httpError('MY PROFILE', next, error, req, 500)
     }
-};
+}

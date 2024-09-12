@@ -69,6 +69,20 @@ const userSchema = new mongoose.Schema({
             type: String,
             default: 'INR'
         },
+        bankDetails: {
+            accNo: {
+                type: Number,
+                required: true
+            },
+            ifsc: {
+                type: String,
+                required: true
+            },
+            bankName: {
+                type: String,
+                required: true
+            }
+        },
         transactionHistory: [
             {
                 type: {

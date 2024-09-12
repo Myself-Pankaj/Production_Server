@@ -10,9 +10,9 @@ import axios from 'axios'
 export default {
     self: (req, res, next) => {
         try {
-            httpResponse(req, res, 200, responseMessage.SUCCESS, null, null)
+            httpResponse(req, res, 200, responseMessage.OPERATION_SUCCESS, null, null)
         } catch (err) {
-            httpError(next, err, req, 500)
+            httpError('SELF', next, err, req, 500)
         }
     },
     health: (req, res, next) => {
@@ -23,9 +23,9 @@ export default {
                 timestamp: Date.now()
             }
 
-            httpResponse(req, res, 200, responseMessage.SUCCESS, healthData)
+            httpResponse(req, res, 200, responseMessage.OPERATION_SUCCESS, healthData)
         } catch (err) {
-            httpError(next, err, req, 500)
+            httpError('HEALTH', next, err, req, 500)
         }
     },
     calculateDistance: async (req, res, next) => {
@@ -62,14 +62,11 @@ export default {
             } else {
                 // Handle case where Google API responds with non-OK status
                 logger.warn('Unable to calculate distance: Invalid API response', { origin, destination, data })
-                return httpError(next, new CustomError('Unable to calculate distance', 400), req, 400)
+                throw new CustomError('Unable to calculate distance', 400)
             }
         } catch (error) {
-            // Log error details for debugging
-            logger.error('Error calculating distance from Google API', { origin, destination, error })
-
             // Handle possible errors (like network issues or invalid API keys)
-            return httpError(next, new CustomError('An error occurred while fetching the distance', 500), req, 500)
+            return httpError('CALCULATE DISTANCE', next, error, req, 500)
         }
     }
 }

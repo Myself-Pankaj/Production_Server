@@ -1,19 +1,20 @@
 // @ts-nocheck
-import mongoose from 'mongoose';
-import logger from '../utils/logger.js';
-import CustomError from '../utils/customeError.js';
+import mongoose from 'mongoose'
+import logger from '../utils/logger.js'
+import CustomError from '../utils/customeError.js'
 
 const imageSchema = new mongoose.Schema({
     public_id: { type: String, required: true },
     url: { type: String, required: true }
-});
+})
 
 const bookingSchema = new mongoose.Schema({
     orderId: { type: mongoose.Schema.ObjectId, ref: 'Order', required: true },
     departureDate: { type: Date },
     dropOffDate: { type: Date },
+    accepted: { type: Boolean, default: false },
     status: { type: String, enum: ['Upcoming', 'Past', 'Cancelled'], default: 'Upcoming' }
-});
+})
 
 const cabSchema = new mongoose.Schema({
     modelName: { type: String, required: true },
@@ -29,46 +30,46 @@ const cabSchema = new mongoose.Schema({
     createdAt: { type: Date, default: Date.now },
     upcomingBookings: [bookingSchema],
     pastBookings: [bookingSchema]
-});
+})
 
-cabSchema.methods.updateUpcomingBookings = function () {
-    const now = new Date();
-    const pastBookings = [];
+cabSchema.pre.updateUpcomingBookings = function () {
+    const now = new Date()
+    const pastBookings = []
 
     this.upcomingBookings = this.upcomingBookings.filter((booking) => {
         if (booking.departureDate <= now) {
-            booking.status = 'Past';
-            pastBookings.push(booking);
-            return false;
+            booking.status = 'Past'
+            pastBookings.push(booking)
+            return false
         }
-        return true;
-    });
+        return true
+    })
 
-    this.pastBookings.push(...pastBookings);
-};
+    this.pastBookings.push(...pastBookings)
+}
 
 cabSchema.methods.addBooking = async function (orderId, departureDate, dropOffDate) {
     try {
-        const newBooking = { orderId, departureDate, dropOffDate, status: 'Upcoming' };
-        this.upcomingBookings.push(newBooking);
-        this.updateUpcomingBookings();
-        await this.save();
+        const newBooking = { orderId, departureDate, dropOffDate, status: 'Upcoming' }
+        this.upcomingBookings.push(newBooking)
+        this.updateUpcomingBookings()
+        await this.save()
     } catch (error) {
-        logger.error('Error adding booking:', { meta: { error: error } });
-        throw new CustomError('Could not add booking', 500);
+        logger.error('Error adding booking:', { meta: { error: error } })
+        throw new CustomError('Could not add booking', 500)
     }
-};
+}
 
 cabSchema.methods.removeBooking = async function (orderId) {
     try {
-        this.upcomingBookings = this.upcomingBookings.filter((booking) => booking.orderId !== orderId);
-        this.pastBookings = this.pastBookings.filter((booking) => booking.orderId !== orderId);
-        await this.save();
+        this.upcomingBookings = this.upcomingBookings.filter((booking) => booking.orderId !== orderId)
+        this.pastBookings = this.pastBookings.filter((booking) => booking.orderId !== orderId)
+        await this.save()
     } catch (error) {
-        logger.error('Error removing booking:', { meta: { error: error } });
-        throw new CustomError('Could not remove booking', 500);
+        logger.error('Error removing booking:', { meta: { error: error } })
+        throw new CustomError('Could not remove booking', 500)
     }
-};
-cabSchema.index({ capacity: 1, 'upcomingBookings.departureDate': 1 });
+}
+cabSchema.index({ capacity: 1, 'upcomingBookings.departureDate': 1 })
 
-export const Cab = mongoose.model('Cab', cabSchema);
+export const Cab = mongoose.model('Cab', cabSchema)

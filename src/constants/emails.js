@@ -4,7 +4,7 @@ export default {
     /**
      * Registration Email with OTP
      * @param {string} username - User's name
-     * @param {string} otp - One-time password for verification
+     * @param {number} otp - One-time password for verification
      */
     REGISTRATION_EMAIL: (username, otp) => `<html>
       <head>
@@ -357,6 +357,87 @@ export default {
      * @param {string} username - User's name
      */
     CAB_REGISTRATION_SUCCESS_EMAIL: (username) => `<html>
+      <head>
+        <style>
+          body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f5f5;
+            margin: 0;
+            padding: 0;
+            color: #333333;
+          }
+          .container {
+            width: 100%;
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+          }
+          .header {
+            text-align: center;
+            padding: 20px 0;
+            background-color: #ffc107;
+            color: #ffffff;
+            border-radius: 8px 8px 0 0;
+          }
+          .header h1 {
+            margin: 0;
+            font-size: 28px;
+          }
+          .content {
+            padding: 20px;
+          }
+          h2 {
+            font-size: 20px;
+            color: #ffc107;
+            margin-bottom: 10px;
+          }
+          p {
+            line-height: 1.6;
+            margin-bottom: 15px;
+          }
+          .footer {
+            text-align: center;
+            padding: 20px;
+            background-color: #f1f1f1;
+            color: #777777;
+            border-radius: 0 0 8px 8px;
+          }
+          .footer p {
+            margin: 0;
+            font-size: 14px;
+          }
+          a {
+            color: #ffc107;
+            text-decoration: none;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>Your App</h1>
+          </div>
+          <div class="content">
+            <h2>Car Registration Success</h2>
+            <p>Hello ${username},</p>
+            <p>This is a confirmation that your car has been registered successfully. If this action was not initiated by you, please contact our support team immediately.</p>
+          </div>
+          <div class="footer">
+            <p>Best regards,<br>Your App Team</p>
+            <p>For support, contact us at <a href="mailto:support@yourapp.com">support@yourapp.com</a></p>
+          </div>
+        </div>
+      </body>
+    </html>`,
+
+    /**
+     * Forgot Password Email with OTP
+     * @param {string} username - User's name
+     */
+    BOOKING_CONFIRMED_EMAIL: (username) => `<html>
       <head>
         <style>
           body {

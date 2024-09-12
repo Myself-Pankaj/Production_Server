@@ -1,6 +1,6 @@
-import config from '../config/config.js';
-import { EApplicationEnvironment } from '../constants/application.js';
-import logger from './logger.js';
+import config from '../config/config.js'
+import { EApplicationEnvironment } from '../constants/application.js'
+import logger from './logger.js'
 
 export default (req, res, responseStatusCode, responseMessage, data = null, token = null, pagination = null) => {
     const response = {
@@ -16,21 +16,28 @@ export default (req, res, responseStatusCode, responseMessage, data = null, toke
         data: data,
         token: token || null,
         pagination: pagination || null
-    };
-
-    const metaData = config.ENV !== EApplicationEnvironment.PRODUCTION ? { responseMessage } : { responseMessage };
+    }
+    const logData = {
+        request: {
+            ip: req.ip,
+            method: req.method,
+            url: req.originalUrl
+        },
+        status: responseStatusCode,
+        message: responseMessage
+    }
     // Log
     logger.info('CONTROLLER_RESPONSE', {
-        meta: metaData
-    });
+        meta: logData
+    })
 
     // Production Env check
     if (config.ENV === EApplicationEnvironment.PRODUCTION) {
-        delete response.request.ip;
+        delete response.request.ip
     }
 
-    res.status(responseStatusCode).json(response);
-};
+    res.status(responseStatusCode).json(response)
+}
 
 // 1xx Informational
 // 100 Continue: The server has received the initial part of the request and the client should proceed with the rest of the request.

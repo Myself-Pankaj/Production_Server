@@ -69,24 +69,22 @@ const orderSchema = new mongoose.Schema({
     paidAmount: {
         type: Number
     },
-    driverShare: [
-        {
-            driverCut: {
-                type: Number
-            },
-            Via: {
-                type: String
-            },
-            status: {
-                type: String,
-                default: 'UnPaid'
-            },
-            paidAt: {
-                type: Date,
-                default: Date.now
-            }
+    driverShare: {
+        driverCut: {
+            type: Number
+        },
+        Via: {
+            type: String
+        },
+        status: {
+            type: String,
+            default: 'UnPaid'
+        },
+        paidAt: {
+            type: Date,
+            default: Date.now
         }
-    ],
+    },
     driverId: {
         type: mongoose.Schema.ObjectId,
         ref: 'User'

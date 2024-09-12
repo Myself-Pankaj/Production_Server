@@ -55,12 +55,12 @@ export const registerCab = async (req, res, next) => {
 
             uploadedImages = await Promise.all(imagePromises)
         } else {
-            throw new CustomError(responseMessage.MISSING_DETAILS, 400)
+            throw new CustomError(responseMessage.INVALID_INPUT_DATA, 400)
         }
 
         const belongsTo = await User.findById(req.user._id)
         if (!belongsTo) {
-            throw new CustomError(responseMessage.USER_NOT_FOUND, 404)
+            throw new CustomError(responseMessage.RESOURCE_NOT_FOUND('User'), 404)
         }
 
         const carData = {
@@ -93,17 +93,17 @@ export const registerCab = async (req, res, next) => {
                 emails.CAB_REGISTRATION_SUCCESS_EMAIL(belongsTo.username)
             )
         } catch (emailError) {
-            logger.error(responseMessage.EMAIL_SEND_FAIL(belongsTo.email), { meta: { error: emailError } })
+            logger.error(responseMessage.EMAIL_SENDING_FAILED(belongsTo.email), { meta: { error: emailError } })
         }
 
         // Invalidate cache keys
         // Cachestorage.del(['all_cabs', 'all_cabs_user', 'driver_cabs']);
 
-        httpResponse(req, res, 201, responseMessage.CAR_REGISTRATION_SUCCESS, car, null)
+        httpResponse(req, res, 201, responseMessage.CAB_REGISTRATION_SUCCESS, car, null)
     } catch (error) {
         await session.abortTransaction() // Rollback in case of error
-        logger.error(responseMessage.CAR_REGISTRATION_FAIL, { meta: { error } })
-        httpError(next, error, req, 500)
+        logger.error(responseMessage.CAB_REGISTRATION_FAIL, { meta: { error } })
+        httpError('CAB REGISTRATION', next, error, req, 500)
     } finally {
         session.endSession() // End session after transaction
         if (fs.existsSync(tmpDir)) {
@@ -128,10 +128,9 @@ export const updateCab = async (req, res, next) => {
         const cab = await Cab.findById(cabId)
         // Check if the cab exists
         if (!cab) {
-            throw new CustomError(responseMessage.CAB_NOT_FOUND, 404)
+            throw new CustomError(responseMessage.RESOURCE_NOT_FOUND('Cab'), 404)
         }
 
-        // Check if the user is the owner of the cab
         // Check if the user is the owner of the cab
         if (cab.belongsTo.toString() !== req.user._id.toString()) {
             throw new CustomError(responseMessage.UNAUTHORIZED_ACCESS, 403)
@@ -196,11 +195,11 @@ export const updateCab = async (req, res, next) => {
 
         //   Cachestorage.del(['all_cabs', 'all_cabs_user', 'driver_cabs']);
 
-        httpResponse(req, res, 201, responseMessage.CAR_UPDATE_SUCCESS, updatedCab, null)
+        httpResponse(req, res, 201, responseMessage.CAB_UPDATE_SUCCESS, updatedCab, null)
     } catch (error) {
         await session.abortTransaction() // Rollback in case of error
-        logger.error(responseMessage.CAR_UPDATE_FAIL, { meta: { error } })
-        httpError(next, error, req, 500)
+
+        httpError('UPDATE CAB', next, error, req, 500)
     } finally {
         session.endSession() // End session after transaction
         if (fs.existsSync(tmpDir)) {
@@ -216,24 +215,23 @@ export const getRateDefinedCab = async (req, res, next) => {
         // Check if the data is in the cache
         const cachedCabs = getCache(cacheKey)
         if (cachedCabs) {
-            return httpResponse(req, res, 200, responseMessage.CACHE_SUCCESS, cachedCabs, null)
+            return httpResponse(req, res, 200, responseMessage.CACHE_UPDATE_SUCCESS, cachedCabs, null)
         }
 
         // If not in cache, fetch from database
         const cabs = await Cab.find({ isReady: true })
 
         if (cabs.length === 0) {
-            throw new CustomError(responseMessage.CAB_NOT_FOUND, 404)
+            throw new CustomError(responseMessage.RESOURCE_NOT_FOUND('Cab'), 404)
         }
 
         // Cache the result for 10 minutes (600 seconds)
         setCache(cacheKey, cabs, 600)
 
         // Return the response with the data
-        httpResponse(req, res, 200, responseMessage.SUCCESS, cabs, null)
+        httpResponse(req, res, 200, responseMessage.OPERATION_SUCCESS, cabs, null)
     } catch (error) {
-        logger.error(responseMessage.CAB_NOT_FOUND, { meta: { error } })
-        httpError(next, error, req, 500)
+        httpError('GET RATE DEFINED CABS', next, error, req, 500)
     }
 }
 
@@ -243,34 +241,30 @@ export const getSingleCabs = async (req, res, next) => {
 
         const cachedCab = getCache(cacheKey)
         if (cachedCab) {
-            return httpResponse(req, res, 200, responseMessage.CACHE_SUCCESS, cachedCab, null)
+            return httpResponse(req, res, 200, responseMessage.CACHE_UPDATE_SUCCESS, cachedCab, null)
         }
         const cab = await Cab.findById(req.params.id).lean()
         if (!cab) {
-            throw new CustomError(responseMessage.CAB_NOT_FOUND, 404)
+            throw new CustomError(responseMessage.RESOURCE_NOT_FOUND('Cab'), 404)
         }
         setCache(cacheKey, cab, 600)
 
         // Return the response with the data
-        httpResponse(req, res, 200, responseMessage.SUCCESS, cab, null)
+        httpResponse(req, res, 200, responseMessage.OPERATION_SUCCESS, cab, null)
     } catch (error) {
-        httpError(next, error, req, 500)
+        httpError('GET SINGLE CAB', next, error, req, 500)
     }
 }
 
 export const getDriverOwnedCabs = async (req, res, next) => {
     try {
-        const cacheKey = 'driver_owned_cabs'
         if (req.user.role !== 'Driver' && req.user.role !== 'Admin') {
             throw new CustomError(responseMessage.UNAUTHORIZED_ACCESS, 403)
         }
         if (!req.user.haveCab) {
-            throw new CustomError(responseMessage.CAB_NOT_FOUND, 404)
+            throw new CustomError(responseMessage.RESOURCE_NOT_FOUND('Cab'), 404)
         }
-        const cachedDriverOwnsCab = getCache(cacheKey)
-        if (cachedDriverOwnsCab) {
-            return httpResponse(req, res, 200, responseMessage.CACHE_SUCCESS, cachedDriverOwnsCab, null)
-        }
+
         const driverOwnsCab = await Cab.find({ belongsTo: req.user._id })
             .populate({ path: 'belongsTo', select: 'username email' })
             .select('-__v')
@@ -278,13 +272,11 @@ export const getDriverOwnedCabs = async (req, res, next) => {
         // console.log(driverOwnsCab);
 
         if (driverOwnsCab.length === 0 || !driverOwnsCab) {
-            throw new CustomError(responseMessage.CAB_NOT_FOUND, 404)
+            throw new CustomError(responseMessage.RESOURCE_NOT_FOUND('Cab'), 404)
         }
-        setCache(cacheKey, driverOwnsCab, 600)
-        httpResponse(req, res, 200, responseMessage.SUCCESS, driverOwnsCab, null)
+        httpResponse(req, res, 200, responseMessage.OPERATION_SUCCESS, driverOwnsCab, null)
     } catch (error) {
-        logger.error(responseMessage.CAB_NOT_FOUND, { meta: { error } })
-        httpError(next, error, req, 500)
+        httpError('DRIVER OWNED CAB', next, error, req, 500)
     }
 }
 
@@ -300,7 +292,7 @@ export const deleteCab = async (req, res, next) => {
 
         // Check if cab exists
         if (!cab) {
-            throw new CustomError(responseMessage.CAB_NOT_FOUND, 404)
+            throw new CustomError(responseMessage.RESOURCE_NOT_FOUND('Cab'), 404)
         }
 
         // Ensure the current user is the owner of the cab or is an admin
@@ -324,10 +316,8 @@ export const deleteCab = async (req, res, next) => {
         }
 
         // Send success response
-        httpResponse(req, res, 200, responseMessage.CAB_DELETE_SUCCESS, null, null)
+        httpResponse(req, res, 200, responseMessage.CAB_DELETION_SUCCESS, null, null)
     } catch (error) {
-        // Log and handle errors
-        logger.error(responseMessage.CAB_DELETE_FAIL, { meta: { error } })
-        httpError(next, error, req, 500)
+        httpError('DELETE CAB', next, error, req, 500)
     }
 }
