@@ -63,6 +63,7 @@ export default {
     CAB_DELETION_SUCCESS: '🚗 Cab removed from the system.', // 200
 
     CAB_RATE_SUCCESS: '🚗 Cab rate successfully updated.', // 200
+    CAB_ASSIGN_SUCCESS: '🚗 Cab assigned successfully',
 
     // Driver-related Messages
     DOCUMENT_UPLOAD_SUCCESS: '📄 Documents uploaded successfully.', // 200
@@ -71,6 +72,8 @@ export default {
     DOCUMENT_TOO_LARGE: '⚠️ Document size exceeds the maximum limit of 5MB.', // 400
     INVALID_BANK_DETAILS: '⚠️ Invalid bank details',
     MISSING_BANK_DETAILS: '⚠️ Bank details are missing',
+    VERIFICATION_COMPLETE: 'Driver is verified and now we can assign bookings to this driver.',
+    VERIFICATION_REVOKED: 'Driver verification has been revoked.',
 
     // Order-related Messages
     ORDER_CREATION_SUCCESS: '📅 Booking successfully created.', // 200
@@ -80,5 +83,6 @@ export default {
         `Payment verification failed for order ${orderId}. If charged, your amount will be refunded within 2-3 business days.`, // 500
 
     // Rate Limiting
-    TOO_MANY_REQUESTS_ERROR: '🚫 Too many requests in a short time. Please slow down and try again later.' // 429
+    TOO_MANY_REQUESTS_ERROR: '🚫 Too many requests in a short time. Please slow down and try again later.', // 429
+    BOOKING_NOT_COMPLETED: '📅 Booking is not completed.'
 }

@@ -171,6 +171,7 @@ export const updateCab = async (req, res, next) => {
         }
 
         // Construct the updated cab data
+
         const cabData = {
             modelName: req.body.modelName,
             feature: req.body.feature,
@@ -179,13 +180,16 @@ export const updateCab = async (req, res, next) => {
             photos: uploadedImages
         }
 
+        if (req.user.role === 'Admin') {
+            cabData.rate = req.body.rate
+        }
         // Update the cab using a session to ensure consistency
         const updatedCab = await Cab.findByIdAndUpdate(cabId, cabData, {
             new: true,
             runValidators: true,
             session
         })
-
+        flushCache()
         await session.commitTransaction() // Commit transaction
 
         // Remove tmp directory after successful operation
@@ -247,6 +251,7 @@ export const getSingleCabs = async (req, res, next) => {
         if (!cab) {
             throw new CustomError(responseMessage.RESOURCE_NOT_FOUND('Cab'), 404)
         }
+
         setCache(cacheKey, cab, 600)
 
         // Return the response with the data

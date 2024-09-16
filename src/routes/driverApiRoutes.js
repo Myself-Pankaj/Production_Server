@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { isAuthenticated } from '../middlewares/authMiddleware.js'
 import {
     cancelBooking,
+    completeBooking,
     confirmBooking,
     driverVerification,
     getDriverAllBookings,
@@ -18,8 +19,8 @@ router.route('/getDriverAllBookings').get(isAuthenticated, getDriverAllBookings)
 
 router.route('/confirm-driver-booking').put(isAuthenticated, confirmBooking)
 
-router.route('/confirm-driver-booking').put(isAuthenticated, confirmBooking)
-
 router.route('/cancel-driver-booking').put(isAuthenticated, cancelBooking)
+
+router.route('/complete-driver-booking').put(isAuthenticated, completeBooking)
 
 export default router

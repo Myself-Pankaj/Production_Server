@@ -18,7 +18,6 @@ const bookingSchema = new mongoose.Schema({
 
 const cabSchema = new mongoose.Schema({
     modelName: { type: String, required: true },
-    type: { type: String },
     capacity: { type: Number, required: true },
     feature: { type: String, enum: ['AC', 'NON/AC'] },
     belongsTo: { type: mongoose.Schema.ObjectId, ref: 'User', required: true },
@@ -28,24 +27,18 @@ const cabSchema = new mongoose.Schema({
     rate: { type: Number, default: 0 },
     isReady: { type: Boolean, default: false },
     createdAt: { type: Date, default: Date.now },
-    upcomingBookings: [bookingSchema],
-    pastBookings: [bookingSchema]
+    upcomingBookings: [bookingSchema]
 })
 
-cabSchema.pre.updateUpcomingBookings = function () {
+cabSchema.methods.updateUpcomingBookings = function () {
     const now = new Date()
-    const pastBookings = []
-
     this.upcomingBookings = this.upcomingBookings.filter((booking) => {
-        if (booking.departureDate <= now) {
-            booking.status = 'Past'
-            pastBookings.push(booking)
-            return false
+        if (booking.departureDate > now) {
+            return true
         }
-        return true
+        booking.status = 'Past'
+        return false
     })
-
-    this.pastBookings.push(...pastBookings)
 }
 
 cabSchema.methods.addBooking = async function (orderId, departureDate, dropOffDate) {
@@ -60,16 +53,44 @@ cabSchema.methods.addBooking = async function (orderId, departureDate, dropOffDa
     }
 }
 
-cabSchema.methods.removeBooking = async function (orderId) {
+cabSchema.methods.removeBooking = async function (orderId, session = null) {
+    const options = session ? { session } : {}
+
     try {
-        this.upcomingBookings = this.upcomingBookings.filter((booking) => booking.orderId !== orderId)
-        this.pastBookings = this.pastBookings.filter((booking) => booking.orderId !== orderId)
-        await this.save()
+        // Filter out the booking to be removed
+        const updatedUpcomingBookings = this.upcomingBookings.filter((booking) => booking.orderId.toString() !== orderId.toString())
+
+        // Use findOneAndUpdate to perform an atomic update
+        const updatedCab = await this.constructor.findOneAndUpdate(
+            { _id: this._id },
+            {
+                $set: {
+                    upcomingBookings: updatedUpcomingBookings
+                }
+            },
+            { new: true, ...options }
+        )
+
+        if (!updatedCab) {
+            logger.error('Cab not found or update failed:', { meta: { cabId: this._id, orderId } })
+            return false
+        }
+
+        // Update the current document with the new data
+        this.upcomingBookings = updatedCab.upcomingBookings
+
+        return true
     } catch (error) {
-        logger.error('Error removing booking:', { meta: { error: error } })
-        throw new CustomError('Could not remove booking', 500)
+        logger.error('Error removing booking:', { meta: { error: error, cabId: this._id, orderId } })
+        return false
     }
 }
+
+cabSchema.pre('save', function (next) {
+    this.updateUpcomingBookings()
+    next()
+})
+
 cabSchema.index({ capacity: 1, 'upcomingBookings.departureDate': 1 })
 
 export const Cab = mongoose.model('Cab', cabSchema)

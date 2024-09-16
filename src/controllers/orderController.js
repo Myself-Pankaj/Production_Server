@@ -2,7 +2,7 @@ import razorpayInstance from '../config/razorpay.js'
 import { EApplicationEnvironment } from '../constants/application.js'
 import responseMessage from '../constants/responseMessage.js'
 import { Order } from '../models/orderModel.js'
-import { delCache, getCache, setCache } from '../services/cacheService.js'
+import { delCache, flushCache, getCache, setCache } from '../services/cacheService.js'
 import CustomError from '../utils/customeError.js'
 import httpError from '../utils/httpError.js'
 import httpResponse from '../utils/httpResponse.js'
@@ -200,6 +200,39 @@ export const getMyBookings = async (req, res, next) => {
 
 export const getOrderDetail = async (req, res, next) => {
     const cacheKey = `order_${req.params.id}`
+    flushCache()
+    try {
+        const cachedOrder = getCache(cacheKey)
+        if (cachedOrder) {
+            return httpResponse(req, res, 200, responseMessage.CACHE_UPDATE_SUCCESS, cachedOrder, null)
+        }
+
+        const order = await Order.findById(req.params.id)
+            .populate({
+                path: 'bookedCab', // First populate bookedCab
+                populate: {
+                    path: 'belongsTo',
+                    select: 'username email phoneNumber' // Select specific fields
+                }
+            })
+            .populate({
+                path: 'driverId', // Populate the driverId in the Order schema
+                select: 'avatar username email phoneNumber ' // Select specific fields
+            })
+            .lean()
+        if (!order) {
+            throw new CustomError(responseMessage.ORDER_NOT_FOUND_ERROR, 404)
+        }
+
+        setCache(cacheKey, order, 600)
+        httpResponse(req, res, 200, responseMessage.OPERATION_SUCCESS, order, null)
+    } catch (error) {
+        httpError('GET ORDER DETAILS', next, error, req, 500)
+    }
+}
+export const getOrderDetailForCustomer = async (req, res, next) => {
+    const cacheKey = `order_${req.params.id}`
+    flushCache()
     try {
         const cachedOrder = getCache(cacheKey)
         if (cachedOrder) {
@@ -210,15 +243,16 @@ export const getOrderDetail = async (req, res, next) => {
         if (!order) {
             throw new CustomError(responseMessage.ORDER_NOT_FOUND_ERROR, 404)
         }
+
         setCache(cacheKey, order, 600)
         httpResponse(req, res, 200, responseMessage.OPERATION_SUCCESS, order, null)
     } catch (error) {
-        httpError('GET ORDER DETAILS', next, error, req, 500)
+        httpError('GET ORDER DETAILS CUSTOMER', next, error, req, 500)
     }
 }
-
 export const getAllPendingOrder = async (req, res, next) => {
     const cacheKey = 'pending_orders'
+    flushCache()
     try {
         if (req.user.role !== 'Driver' && req.user.role !== 'Admin') {
             throw new CustomError(responseMessage.UNAUTHORIZED_ACCESS, 403)
@@ -232,7 +266,7 @@ export const getAllPendingOrder = async (req, res, next) => {
 
         const orders = await Order.find({ bookingStatus: 'Pending' }).select('-_v').lean()
         if (orders.length === 0) {
-            throw new CustomError(responseMessage.ORDER_NOT_FOUND_ERROR, 404)
+            return httpResponse(req, res, 200, responseMessage.ORDER_NOT_FOUND_ERROR, null, null, null)
         }
 
         // Cache the result for 10 minutes (600 seconds)

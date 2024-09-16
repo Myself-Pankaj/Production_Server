@@ -1,6 +1,6 @@
 import responseMessage from '../constants/responseMessage.js'
 import { User } from '../models/userModel.js'
-import { delCache } from '../services/cacheService.js'
+import { delCache, flushCache } from '../services/cacheService.js'
 import httpResponse from '../utils/httpResponse.js'
 import fs from 'fs'
 import logger from '../utils/logger.js'
@@ -177,50 +177,6 @@ export const getDriverUpcommingBookings = async (req, res, next) => {
     }
 }
 
-export const confirmBooking = async (req, res, next) => {
-    const session = await startSession()
-    session.startTransaction()
-    try {
-        if (req.user.role !== 'Driver' && req.user.role !== 'Admin') {
-            throw new CustomError(responseMessage.UNAUTHORIZED_ACCESS, 403)
-        }
-
-        const { orderId } = req.body
-
-        if (!orderId) {
-            throw new CustomError('Order ID is required to confirm the booking', 400)
-        }
-
-        const order = await Order.findByIdAndUpdate(orderId, { bookingStatus: 'Confirmed' }, { new: true, runValidators: true }).populate({
-            path: 'userId',
-            select: 'username email phoneNumber'
-        })
-
-        if (!order) {
-            throw new CustomError(responseMessage.RESOURCE_NOT_FOUND('Order'), 404)
-        }
-        //send an email to your
-        try {
-            await sendMailWithRetry(
-                order.userId.email,
-                responseMessage.BOOKING_CONFIRMED_EMAIL_SUBJECT,
-                emails.BOOKING_CONFIRMED_EMAIL(order.userId.username)
-            )
-        } catch (emailError) {
-            logger.error(responseMessage.EMAIL_SENDING_FAILED(order.userId.email), { error: emailError })
-            // Continue even if email fails, but log the error
-        }
-        await delCache(['pending_orders', 'all_bookings'])
-
-        await session.commitTransaction()
-        session.endSession()
-        httpResponse(req, res, 200, responseMessage.OPERATION_SUCCESS, null, null, null)
-    } catch (error) {
-        await session.abortTransaction()
-        session.endSession()
-        httpError('CONFIRM BOOKING', next, error, req, 500)
-    }
-}
 export const getDriverAllBookings = async (req, res, next) => {
     try {
         // Check user role
@@ -262,6 +218,63 @@ export const getDriverAllBookings = async (req, res, next) => {
         httpResponse(req, res, 200, responseMessage.OPERATION_SUCCESS, driverOrders, null, pagination)
     } catch (error) {
         httpError('GET ALL DRIVER BOOKING', next, error, req, 500)
+    }
+}
+
+export const confirmBooking = async (req, res, next) => {
+    const session = await startSession()
+    session.startTransaction()
+    try {
+        if (req.user.role !== 'Driver' && req.user.role !== 'Admin') {
+            throw new CustomError(responseMessage.UNAUTHORIZED_ACCESS, 403)
+        }
+
+        const { orderId } = req.body
+
+        if (!orderId) {
+            throw new CustomError('Order ID is required to confirm the booking', 400)
+        }
+
+        const order = await Order.findByIdAndUpdate(orderId, { bookingStatus: 'Confirmed' }, { new: true, runValidators: true }).populate({
+            path: 'userId',
+            select: 'username email phoneNumber'
+        })
+
+        if (!order) {
+            throw new CustomError(responseMessage.RESOURCE_NOT_FOUND('Order'), 404)
+        }
+
+        const cab = await Cab.findOne({ 'upcomingBookings.orderId': orderId })
+        if (!cab) {
+            throw new CustomError('Cab with this booking not found', 404)
+        }
+        const bookingIndex = cab.upcomingBookings.findIndex((booking) => booking.orderId.toString() === orderId)
+        if (bookingIndex === -1) {
+            throw new CustomError(`Booking not found in cab's upcoming bookings`, 404)
+        }
+        cab.upcomingBookings[bookingIndex].accepted = true
+        await cab.save()
+        //send an email to your
+        try {
+            await sendMailWithRetry(
+                order.userId.email,
+                responseMessage.BOOKING_CONFIRMED_EMAIL_SUBJECT,
+                emails.BOOKING_CONFIRMED_EMAIL(order.userId.username)
+            )
+        } catch (emailError) {
+            logger.error(responseMessage.EMAIL_SENDING_FAILED(order.userId.email), { error: emailError })
+            // Continue even if email fails, but log the error
+        }
+        // await delCache(['pending_orders', 'all_bookings'])
+        flushCache()
+
+        await session.commitTransaction()
+        session.endSession()
+        httpResponse(req, res, 200, responseMessage.OPERATION_SUCCESS, null, null, null)
+    } catch (error) {
+        await session.abortTransaction()
+        session.endSession()
+        httpError('CONFIRM BOOKING', next, error, req, 500)
     }
 }
 
@@ -316,7 +329,7 @@ export const cancelBooking = async (req, res, next) => {
             throw new CustomError('Failed to update order', 500)
         }
         // Clear cache
-        await delCache(['pending_orders', 'all_bookings'])
+        flushCache()
 
         await session.commitTransaction()
         session.endSession()
@@ -326,5 +339,98 @@ export const cancelBooking = async (req, res, next) => {
         await session.abortTransaction()
         session.endSession()
         httpError('CANCEL BOOKING', next, error, req, 500)
+    }
+}
+
+export const completeBooking = async (req, res, next) => {
+    const session = await mongoose.startSession()
+    session.startTransaction()
+
+    try {
+        const { role } = req.user
+        const { orderId } = req.body
+
+        // Validate role
+        if (!['Driver', 'Admin'].includes(role)) {
+            throw new CustomError(responseMessage.UNAUTHORIZED_ACCESS, 403)
+        }
+
+        // Validate orderId
+        if (!orderId) {
+            throw new CustomError(responseMessage.INVALID_INPUT_DATA, 400)
+        }
+
+        // Fetch order and validate
+        const order = await Order.findById(orderId).session(session)
+        if (!order) {
+            throw new CustomError(responseMessage.RESOURCE_NOT_FOUND('Order'), 404)
+        }
+
+        // Check if booking can be completed (departure date must be in the past)
+        if (new Date(order.departureDate) > new Date()) {
+            throw new CustomError(responseMessage.BOOKING_NOT_COMPLETED, 400)
+        }
+
+        // Fetch associated cab and validate
+        const cab = await Cab.findById(order.bookedCab).session(session)
+        if (!cab) {
+            throw new CustomError(responseMessage.RESOURCE_NOT_FOUND('Cab'), 404)
+        }
+
+        // Remove booking from cab
+        cab.removeBooking(orderId)
+        await cab.save({ session })
+
+        // Validate driver's share
+        const driverCut = order.driverShare?.driverCut || 0
+        if (driverCut < 0) {
+            throw new CustomError(responseMessage.INVALID_REQUEST, 400)
+        }
+
+        // Fetch driver and validate
+        const driver = await User.findById(order.driverId).session(session)
+        if (!driver) {
+            throw new CustomError(responseMessage.RESOURCE_NOT_FOUND('Driver'), 404)
+        }
+
+        // Initialize wallet if not present
+        if (!driver.wallet) {
+            driver.wallet = {
+                balance: 0,
+                currency: 'INR',
+                transactionHistory: []
+            }
+        }
+
+        // Update driver's wallet or order payment details based on payment method
+        if (order.paymentMethod === 'Online') {
+            driver.wallet.balance += driverCut
+        } else {
+            order.driverShare = {
+                ...order.driverShare,
+                Via: 'Customer',
+                status: 'Paid',
+                paidAt: new Date()
+            }
+        }
+
+        // Save driver and order updates
+        await driver.save({ session })
+        order.bookingStatus = 'Completed'
+        await order.save({ session })
+
+        // Commit transaction
+        await session.commitTransaction()
+
+        // Clear cache and send success response
+        await flushCache()
+        return httpResponse(req, res, 200, responseMessage.OPERATION_SUCCESS, null, null, null)
+    } catch (error) {
+        // Rollback transaction on error
+        await session.abortTransaction()
+        httpError('COMPLETE BOOKING', next, error, req, 500)
+    } finally {
+        // End session in the finally block to ensure it always ends
+        session.endSession()
     }
 }

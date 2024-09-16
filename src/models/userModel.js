@@ -71,16 +71,13 @@ const userSchema = new mongoose.Schema({
         },
         bankDetails: {
             accNo: {
-                type: Number,
-                required: true
+                type: Number
             },
             ifsc: {
-                type: String,
-                required: true
+                type: String
             },
             bankName: {
-                type: String,
-                required: true
+                type: String
             }
         },
         transactionHistory: [
