@@ -19,6 +19,7 @@ import adminRoute from './src/routes/adminApiRoutes.js'
 import config from './src/config/config.js'
 import { EApplicationEnvironment } from './src/constants/application.js'
 import session from 'express-session'
+import MongoStore from 'connect-mongo'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -43,10 +44,10 @@ app.use(express.static(path.join(__dirname, 'public')))
 
 app.use(
     session({
-        // store: MongoStore.create({
-        //     mongoUrl: config.DB_URI, // MongoDB connection URL
-        //     ttl: 14 * 24 * 60 * 60 // Sessions expire in 14 days
-        //   }),
+        store: MongoStore.create({
+            mongoUrl: config.DB_URI, // MongoDB connection URL
+            ttl: 14 * 24 * 60 * 60 // Sessions expire in 14 days
+        }),
         secret: config.SESSION_SECRET || 'temporary',
         resave: false,
         saveUninitialized: false,

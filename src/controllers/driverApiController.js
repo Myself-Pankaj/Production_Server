@@ -279,158 +279,279 @@ export const confirmBooking = async (req, res, next) => {
 }
 
 export const cancelBooking = async (req, res, next) => {
-    const session = await startSession()
-    session.startTransaction()
-    try {
-        if (req.user.role !== 'Driver' && req.user.role !== 'Admin') {
-            throw new CustomError(responseMessage.UNAUTHORIZED_ACCESS, 403)
-        }
+    const maxRetries = 3
 
-        const { orderId } = req.body
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        const session = await mongoose.startSession()
+        session.startTransaction()
 
-        if (!orderId) {
-            throw new CustomError('Order ID is required to confirm the booking', 400)
-        }
+        try {
+            if (req.user.role !== 'Driver' && req.user.role !== 'Admin') {
+                throw new CustomError(responseMessage.UNAUTHORIZED_ACCESS, 403)
+            }
 
-        // Find the order
-        const order = await Order.findById(orderId).session(session)
-        if (!order) {
-            throw new CustomError(responseMessage.RESOURCE_NOT_FOUND('Order'), 404)
+            const { orderId } = req.body
+
+            if (!orderId) {
+                throw new CustomError('Order ID is required to cancel the booking', 400)
+            }
+
+            // Find the order
+            const order = await Order.findById(orderId).session(session)
+            if (!order) {
+                throw new CustomError(responseMessage.RESOURCE_NOT_FOUND('Order'), 404)
+            }
+
+            // Find the cab associated with the order and remove the booking
+            if (order.bookedCab) {
+                const cab = await Cab.findById(order.bookedCab).session(session)
+                if (!cab) {
+                    throw new CustomError(responseMessage.RESOURCE_NOT_FOUND('Cab'), 404)
+                }
+                cab.removeBooking(orderId)
+                await cab.save({ session })
+            }
+
+            // Update the order status and remove all driver-related information
+            const updateResult = await Order.updateOne(
+                { _id: orderId },
+                {
+                    $set: {
+                        bookingStatus: 'Pending',
+                        driverId: null
+                    },
+                    $unset: {
+                        driverShare: '',
+                        driverCut: '',
+                        driverStatus: ''
+                    }
+                },
+                { session, runValidators: true }
+            )
+
+            if (updateResult.modifiedCount === 0) {
+                throw new CustomError('Failed to update order', 500)
+            }
+
+            // Clear cache
+            await flushCache()
+
+            // Commit transaction and end session
+            await session.commitTransaction()
+            session.endSession()
+
+            return httpResponse(req, res, 201, responseMessage.OPERATION_SUCCESS, null, null, null)
+        } catch (error) {
+            await session.abortTransaction()
+
+            // Handle write conflicts with exponential backoff
+            if (error.message.includes('Write conflict')) {
+                if (attempt < maxRetries) {
+                    const delay = Math.pow(2, attempt) * 100 // Exponential backoff
+                    await new Promise((resolve) => setTimeout(resolve, delay))
+                    continue // Retry after the delay
+                } else {
+                    return httpError('CANCEL BOOKING', next, new CustomError(responseMessage.CONFLICT, 409), req)
+                }
+            } else {
+                // Handle other errors (validation, etc.)
+                return httpError('CANCEL BOOKING', next, error, req, 500)
+            }
+        } finally {
+            session.endSession()
         }
-        // Find the cab associated with the order and remove the booking
-        if (order.bookedCab) {
+    }
+}
+
+// export const completeBooking = async (req, res, next) => {
+//     const session = await mongoose.startSession()
+//     session.startTransaction()
+
+//     try {
+//         const { role } = req.user
+//         const { orderId } = req.body
+
+//         // Validate role
+//         if (!['Driver', 'Admin'].includes(role)) {
+//             throw new CustomError(responseMessage.UNAUTHORIZED_ACCESS, 403)
+//         }
+
+//         // Validate orderId
+//         if (!orderId) {
+//             throw new CustomError(responseMessage.INVALID_INPUT_DATA, 400)
+//         }
+
+//         // Fetch order and validate
+//         const order = await Order.findById(orderId).session(session)
+//         if (!order) {
+//             throw new CustomError(responseMessage.RESOURCE_NOT_FOUND('Order'), 404)
+//         }
+
+//         // Check if booking can be completed (departure date must be in the past)
+//         if (new Date(order.departureDate) > new Date()) {
+//             throw new CustomError(responseMessage.BOOKING_NOT_COMPLETED, 400)
+//         }
+
+//         // Fetch associated cab and validate
+//         const cab = await Cab.findById(order.bookedCab).session(session)
+//         if (!cab) {
+//             throw new CustomError(responseMessage.RESOURCE_NOT_FOUND('Cab'), 404)
+//         }
+
+//         // Remove booking from cab
+//         cab.removeBooking(orderId)
+//         await cab.save({ session })
+
+//         // Validate driver's share
+//         const driverCut = order.driverShare?.driverCut || 0
+//         if (driverCut < 0) {
+//             throw new CustomError(responseMessage.INVALID_REQUEST, 400)
+//         }
+
+//         // Fetch driver and validate
+//         const driver = await User.findById(order.driverId).session(session)
+//         if (!driver) {
+//             throw new CustomError(responseMessage.RESOURCE_NOT_FOUND('Driver'), 404)
+//         }
+
+//         // Initialize wallet if not present
+//         if (!driver.wallet) {
+//             driver.wallet = {
+//                 balance: 0,
+//                 currency: 'INR',
+//                 transactionHistory: []
+//             }
+//         }
+
+//         // Update driver's wallet or order payment details based on payment method
+//         if (order.paymentMethod === 'Online') {
+//             driver.wallet.balance += driverCut
+//         } else {
+//             order.driverShare = {
+//                 ...order.driverShare,
+//                 Via: 'Customer',
+//                 status: 'Paid',
+//                 paidAt: new Date()
+//             }
+//         }
+
+//         // Save driver and order updates
+//         await driver.save({ session })
+//         order.bookingStatus = 'Completed'
+//         await order.save({ session })
+
+//         // Commit transaction
+//         await session.commitTransaction()
+
+//         // Clear cache and send success response
+//         await flushCache()
+//         return httpResponse(req, res, 200, responseMessage.OPERATION_SUCCESS, null, null, null)
+//     } catch (error) {
+//         // Rollback transaction on error
+//         await session.abortTransaction()
+//         httpError('COMPLETE BOOKING', next, error, req, 500)
+//     } finally {
+//         // End session in the finally block to ensure it always ends
+//         session.endSession()
+//     }
+// }
+
+export const completeBooking = async (req, res, next) => {
+    const maxRetries = 3
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        const session = await mongoose.startSession()
+        session.startTransaction()
+
+        try {
+            const { role } = req.user
+            const { orderId } = req.body
+
+            // Validate role and input
+            if (!['Driver', 'Admin'].includes(role)) {
+                throw new CustomError(responseMessage.UNAUTHORIZED_ACCESS, 403)
+            }
+            if (!orderId) {
+                throw new CustomError(responseMessage.INVALID_INPUT_DATA, 400)
+            }
+
+            // Fetch order and cab
+            const order = await Order.findById(orderId).session(session)
+            if (!order) {
+                throw new CustomError(responseMessage.RESOURCE_NOT_FOUND('Order'), 404)
+            }
+
+            if (new Date(order.departureDate) > new Date()) {
+                throw new CustomError(responseMessage.BOOKING_NOT_COMPLETED, 400)
+            }
+
             const cab = await Cab.findById(order.bookedCab).session(session)
             if (!cab) {
                 throw new CustomError(responseMessage.RESOURCE_NOT_FOUND('Cab'), 404)
             }
+
+            // Perform booking removal and validation
             cab.removeBooking(orderId)
             await cab.save({ session })
-        }
 
-        // Update the order status and remove all driver-related information
-        const updateResult = await Order.updateOne(
-            { _id: orderId },
-            {
-                $set: {
-                    bookingStatus: 'Pending',
-                    driverId: null
-                },
-                $unset: {
-                    driverShare: '',
-                    driverCut: '',
-                    driverStatus: ''
-                    // Add any other fields you want to remove
+            const driverCut = order.driverShare?.driverCut || 0
+            if (driverCut < 0) {
+                throw new CustomError(responseMessage.INVALID_REQUEST, 400)
+            }
+
+            const driver = await User.findById(order.driverId).session(session)
+            if (!driver) {
+                throw new CustomError(responseMessage.RESOURCE_NOT_FOUND('Driver'), 404)
+            }
+
+            // Initialize wallet and update payment
+            if (!driver.wallet) {
+                driver.wallet = {
+                    balance: 0,
+                    currency: 'INR',
+                    transactionHistory: []
                 }
-            },
-            { session, runValidators: true }
-        )
-
-        if (updateResult.modifiedCount === 0) {
-            throw new CustomError('Failed to update order', 500)
-        }
-        // Clear cache
-        flushCache()
-
-        await session.commitTransaction()
-        session.endSession()
-
-        httpResponse(req, res, 201, responseMessage.OPERATION_SUCCESS, null, null, null)
-    } catch (error) {
-        await session.abortTransaction()
-        session.endSession()
-        httpError('CANCEL BOOKING', next, error, req, 500)
-    }
-}
-
-export const completeBooking = async (req, res, next) => {
-    const session = await mongoose.startSession()
-    session.startTransaction()
-
-    try {
-        const { role } = req.user
-        const { orderId } = req.body
-
-        // Validate role
-        if (!['Driver', 'Admin'].includes(role)) {
-            throw new CustomError(responseMessage.UNAUTHORIZED_ACCESS, 403)
-        }
-
-        // Validate orderId
-        if (!orderId) {
-            throw new CustomError(responseMessage.INVALID_INPUT_DATA, 400)
-        }
-
-        // Fetch order and validate
-        const order = await Order.findById(orderId).session(session)
-        if (!order) {
-            throw new CustomError(responseMessage.RESOURCE_NOT_FOUND('Order'), 404)
-        }
-
-        // Check if booking can be completed (departure date must be in the past)
-        if (new Date(order.departureDate) > new Date()) {
-            throw new CustomError(responseMessage.BOOKING_NOT_COMPLETED, 400)
-        }
-
-        // Fetch associated cab and validate
-        const cab = await Cab.findById(order.bookedCab).session(session)
-        if (!cab) {
-            throw new CustomError(responseMessage.RESOURCE_NOT_FOUND('Cab'), 404)
-        }
-
-        // Remove booking from cab
-        cab.removeBooking(orderId)
-        await cab.save({ session })
-
-        // Validate driver's share
-        const driverCut = order.driverShare?.driverCut || 0
-        if (driverCut < 0) {
-            throw new CustomError(responseMessage.INVALID_REQUEST, 400)
-        }
-
-        // Fetch driver and validate
-        const driver = await User.findById(order.driverId).session(session)
-        if (!driver) {
-            throw new CustomError(responseMessage.RESOURCE_NOT_FOUND('Driver'), 404)
-        }
-
-        // Initialize wallet if not present
-        if (!driver.wallet) {
-            driver.wallet = {
-                balance: 0,
-                currency: 'INR',
-                transactionHistory: []
             }
-        }
 
-        // Update driver's wallet or order payment details based on payment method
-        if (order.paymentMethod === 'Online') {
-            driver.wallet.balance += driverCut
-        } else {
-            order.driverShare = {
-                ...order.driverShare,
-                Via: 'Customer',
-                status: 'Paid',
-                paidAt: new Date()
+            if (order.paymentMethod === 'Online') {
+                driver.wallet.balance += driverCut
+            } else {
+                order.driverShare = {
+                    ...order.driverShare,
+                    Via: 'Customer',
+                    status: 'Paid',
+                    paidAt: new Date()
+                }
             }
+
+            // Save updates
+            await driver.save({ session })
+            order.bookingStatus = 'Completed'
+            await order.save({ session })
+
+            // Commit transaction and send response
+            await session.commitTransaction()
+            await flushCache()
+
+            return httpResponse(req, res, 200, responseMessage.OPERATION_SUCCESS, null, null, null)
+        } catch (error) {
+            await session.abortTransaction()
+
+            // Check for transient errors like write conflicts
+            if (error.message.includes('Write conflict')) {
+                if (attempt < maxRetries) {
+                    const delay = Math.pow(2, attempt) * 100 // Exponential backoff
+                    await new Promise((resolve) => setTimeout(resolve, delay))
+                    continue // Retry after the delay
+                } else {
+                    return httpError('COMPLETE BOOKING', next, new CustomError(responseMessage.CONFLICT, 409), req)
+                }
+            } else {
+                // Non-retryable errors (validation, etc.)
+                return httpError('COMPLETE BOOKING', next, error, req, 500)
+            }
+        } finally {
+            session.endSession()
         }
-
-        // Save driver and order updates
-        await driver.save({ session })
-        order.bookingStatus = 'Completed'
-        await order.save({ session })
-
-        // Commit transaction
-        await session.commitTransaction()
-
-        // Clear cache and send success response
-        await flushCache()
-        return httpResponse(req, res, 200, responseMessage.OPERATION_SUCCESS, null, null, null)
-    } catch (error) {
-        // Rollback transaction on error
-        await session.abortTransaction()
-        httpError('COMPLETE BOOKING', next, error, req, 500)
-    } finally {
-        // End session in the finally block to ensure it always ends
-        session.endSession()
     }
 }

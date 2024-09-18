@@ -54,7 +54,7 @@
         "helmet": "^7.1.0",
         "jsonwebtoken": "^9.0.2",
         "moment-timezone": "^0.5.45",
-        "mongoose": "^8.6.0",
+        "mongoose": "^8.6.3",
         "node-cache": "^5.1.2",
         "nodemailer": "^6.9.14",
         "npm-check-updates": "^17.1.1",

@@ -13,7 +13,7 @@ export const sendToken = (req, res, user, statusCode, message, deletionToken = n
             httpOnly: true,
             secure: config.NODE_ENV === 'production', // Use secure cookies in production
             sameSite: 'strict', // Protect against CSRF attacks
-            expires: new Date(Date.now() + parseInt(config.JWT_COOKIE_EXPIRE) * 60 * 1000) //* 24 * 60 * 60 * 1000
+            expires: new Date(Date.now() + parseInt(config.JWT_COOKIE_EXPIRE) * 24 * 60 * 60 * 1000) //* 24 * 60 * 60 * 1000
         }
 
         // Hash sensitive data before sending
