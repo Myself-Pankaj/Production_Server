@@ -9,6 +9,9 @@ import httpError from '../utils/httpError.js'
 import httpResponse from '../utils/httpResponse.js'
 import { EApplicationEnvironment } from '../constants/application.js'
 
+import logger from '../utils/logger.js'
+import { fundTransfer, setupRazorpayAccount } from '../services/payoutService.js'
+
 export const allCabsAdmin = async (req, res, next) => {
     try {
         // Ensure only admins can access this route
@@ -723,14 +726,192 @@ export const allPaymentInfo = async (req, res, next) => {
         if (req.user.role !== 'Admin') {
             throw new CustomError(responseMessage.UNAUTHORIZED_ACCESS, 403)
         }
-        const userWithPendingPayment = await User.find({ 'wallet.balance': { $ne: 0 }, role: 'Driver' }).lean()
 
-        if (userWithPendingPayment.length === 0 || !userWithPendingPayment) {
+        // Extract pagination parameters from query
+        const page = parseInt(req.query.page) || 1 // Default to page 1 if not provided
+        const limit = parseInt(req.query.limit) || 10 // Default to 10 items per page if not provided
+        const skip = (page - 1) * limit // Calculate the number of documents to skip
+
+        // Find users with non-zero wallet balance and pending transactions
+        const usersWithPendingTransactions = await User.find({
+            'wallet.balance': { $ne: 0 },
+            role: 'Driver'
+        })
+            .select('_id email wallet bankDetails')
+            .lean()
+
+        if (!usersWithPendingTransactions || usersWithPendingTransactions.length === 0) {
             throw new CustomError(responseMessage.RESOURCE_NOT_FOUND('Driver'), 404)
         }
 
-        httpResponse(req, res, 200, responseMessage.OPERATION_SUCCESS, userWithPendingPayment, null, null)
+        // Create a list of individual transaction entries, one per pending transaction
+        const transactionEntries = []
+
+        usersWithPendingTransactions.forEach((user) => {
+            user.wallet.transactionHistory.forEach((transaction) => {
+                transactionEntries.push({
+                    userId: user._id,
+                    email: user.email,
+                    bankDetails: user.bankDetails,
+                    transaction: {
+                        amount: transaction.amount,
+                        currency: user.wallet.currency,
+                        transactionDate: transaction.transactionDate,
+                        description: transaction.description,
+                        orderId: transaction.orderId,
+                        isPending: transaction.isPending
+                    }
+                })
+            })
+        })
+
+        // Paginate the results
+        const paginatedEntries = transactionEntries.slice(skip, skip + limit)
+        const totalEntries = transactionEntries.length
+        const totalPages = Math.ceil(totalEntries / limit)
+
+        // Prepare pagination object
+        const pagination = {
+            totalEntries,
+            totalPages,
+            currentPage: page,
+            limit
+        }
+
+        // Send response with separate pagination
+        httpResponse(req, res, 200, responseMessage.OPERATION_SUCCESS, paginatedEntries, null, pagination)
     } catch (error) {
         httpError('ALL PAYMENT INFO', next, error, req, 500)
+    }
+}
+
+export const pendingPaymentInfo = async (req, res, next) => {
+    try {
+        if (req.user.role !== 'Admin') {
+            throw new CustomError(responseMessage.UNAUTHORIZED_ACCESS, 403)
+        }
+
+        // Find users with non-zero wallet balance and pending transactions
+        const usersWithPendingTransactions = await User.find({
+            'wallet.balance': { $ne: 0 },
+            role: 'Driver',
+            'wallet.transactionHistory.isPending': true
+        })
+            .select('_id email wallet bankDetails') // Select only the relevant fields
+            .lean()
+
+        if (!usersWithPendingTransactions || usersWithPendingTransactions.length === 0) {
+            throw new CustomError(responseMessage.RESOURCE_NOT_FOUND('Driver'), 404)
+        }
+
+        // Create a list of individual transaction entries, one per pending transaction
+        const transactionEntries = []
+
+        usersWithPendingTransactions.forEach((user) => {
+            user.wallet.transactionHistory.forEach((transaction) => {
+                if (transaction.isPending) {
+                    transactionEntries.push({
+                        userId: user._id,
+                        email: user.email,
+                        bankDetails: user.bankDetails,
+                        transaction: {
+                            amount: transaction.amount,
+                            currency: user.wallet.currency,
+                            transactionDate: transaction.transactionDate,
+                            description: transaction.description,
+                            orderId: transaction.orderId,
+                            isPending: transaction.isPending
+                        }
+                    })
+                }
+            })
+        })
+
+        httpResponse(req, res, 200, responseMessage.OPERATION_SUCCESS, transactionEntries, null, null)
+    } catch (error) {
+        httpError('ALL PAYMENT INFO', next, error, req, 500)
+    }
+}
+
+export const payoutController = async (req, res, next) => {
+    try {
+        // Authorization check
+        if (req.user.role !== 'Admin') {
+            throw new CustomError(responseMessage.UNAUTHORIZED_ACCESS, 403)
+        }
+
+        // Input validation
+        const { userId, amount, orderId } = req.body
+        if (!userId || !amount || !orderId) {
+            throw new CustomError(responseMessage.INVALID_INPUT_DATA, 400)
+        }
+
+        // Fetch user and validate
+        const user = await User.findById(userId)
+        if (!user) {
+            throw new CustomError(responseMessage.RESOURCE_NOT_FOUND('User'), 404)
+        }
+
+        // Check for sufficient wallet balance and valid bank details
+        if (!user.wallet || !user.wallet.bankDetails) {
+            throw new CustomError('Insufficient funds or missing bank details', 400)
+        }
+
+        // Razorpay payout process
+        let transferResult
+        if (!user.wallet.bankDetails.fundAcc) {
+            try {
+                const accountSetup = await setupRazorpayAccount(user, orderId)
+                if (accountSetup.validationStatus !== 'created') {
+                    throw new CustomError('Fund account validation failed', 400)
+                }
+                user.wallet.bankDetails.fundAcc = accountSetup.fundAccountId
+                await user.save()
+            } catch (error) {
+                logger.error('Razorpay account setup failed:', error)
+                throw new CustomError('Failed to set up Razorpay account', 500)
+            }
+        }
+
+        try {
+            transferResult = await fundTransfer(user.wallet.bankDetails.fundAcc, amount, user, orderId)
+        } catch (error) {
+            logger.error('Fund transfer failed:', error)
+            throw new CustomError('Failed to transfer funds', 500)
+        }
+
+        // Update user's wallet
+        const updateResult = await User.updateOne(
+            { _id: userId, 'wallet.transactionHistory.orderId': orderId },
+            {
+                $set: {
+                    'wallet.transactionHistory.$.isPending': false,
+                    'wallet.transactionHistory.$.payoutId': transferResult.id,
+                    'wallet.transactionHistory.$.transactionDate': new Date(),
+                    'wallet.transactionHistory.$.description': `Payout via ${transferResult.mode}`
+                },
+                $inc: { 'wallet.balance': -amount }
+            }
+        )
+
+        if (updateResult.nModified === 0) {
+            logger.warn(`No wallet update for user ${userId} and order ${orderId}`)
+        }
+
+        // Update the order
+        const order = await Order.findById(orderId)
+        if (!order) {
+            throw new CustomError(responseMessage.RESOURCE_NOT_FOUND('Order'), 404)
+        }
+
+        order.driverShare.Via = transferResult.mode
+        order.driverShare.status = 'Paid'
+        order.driverShare.paidAt = new Date()
+        await order.save()
+
+        // Return success response
+        httpResponse(req, res, 200, responseMessage.OPERATION_SUCCESS, transferResult, null, null)
+    } catch (error) {
+        httpError('PAYOUT_CONTROLLER', next, error, req, 500)
     }
 }

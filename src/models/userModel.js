@@ -70,6 +70,9 @@ const userSchema = new mongoose.Schema({
             default: 'INR'
         },
         bankDetails: {
+            accountHolderName: {
+                type: String
+            },
             accNo: {
                 type: Number
             },
@@ -77,6 +80,9 @@ const userSchema = new mongoose.Schema({
                 type: String
             },
             bankName: {
+                type: String
+            },
+            fundAcc: {
                 type: String
             }
         },
@@ -95,7 +101,10 @@ const userSchema = new mongoose.Schema({
                     type: Date,
                     default: Date.now
                 },
-                description: String
+                description: String,
+                isPending: { type: Boolean, default: false },
+                payoutId: String,
+                orderId: { type: mongoose.Schema.ObjectId, ref: 'Order', required: true }
             }
         ]
     },

@@ -12,6 +12,8 @@ import {
     assignBooking,
     getAvailableCabs,
     getDriverInfoById,
+    payoutController,
+    pendingPaymentInfo,
     verifyDriver
 } from '../controllers/adminController.js'
 
@@ -38,6 +40,10 @@ router.route('/driverInfo/:id').get(isAuthenticated, getDriverInfoById)
 router.route('/verifyDriver/:id').put(isAuthenticated, verifyDriver)
 
 router.route('/allPendingPayment').get(isAuthenticated, allPaymentInfo)
+
+router.route('/PendingPayment').get(isAuthenticated, pendingPaymentInfo)
+
+router.route('/payout').post(isAuthenticated, payoutController)
 
 router.route('/adminStats').get(isAuthenticated, adminStats)
 

@@ -78,10 +78,11 @@ export const driverVerification = async (req, res, next) => {
         user.isDocumentSubmited = true
 
         const accNo = req.body['bankDetails[accNo]']
+        const accountHolderName = req.body['bankDetails[accountHolderName]']
         const ifsc = req.body['bankDetails[ifsc]']
         const bankName = req.body['bankDetails[bankName]']
 
-        if (!accNo || !ifsc || !bankName) {
+        if (!accNo || !ifsc || !bankName || !accountHolderName) {
             throw new CustomError(responseMessage.MISSING_BANK_DETAILS, 400)
         }
 
@@ -91,6 +92,7 @@ export const driverVerification = async (req, res, next) => {
 
         user.wallet = user.wallet || {}
         user.wallet.bankDetails = {
+            accountHolderName: accountHolderName,
             accNo: parseInt(accNo, 10), // Convert to Number as per schema
             ifsc: ifsc,
             bankName: bankName
@@ -513,9 +515,32 @@ export const completeBooking = async (req, res, next) => {
                 }
             }
 
+            let transactionEntry = {
+                type: 'credit',
+                amount: driverCut,
+                description: '',
+                isPending: false,
+                orderId: order._id
+            }
+
             if (order.paymentMethod === 'Online') {
                 driver.wallet.balance += driverCut
-            } else {
+                transactionEntry.description = 'You will get paid by us'
+                transactionEntry.isPending = true // Payment is pending for online transactions
+            } else if (order.paymentMethod === 'Hybrid') {
+                transactionEntry.description = 'You have been paid by the passenger'
+                transactionEntry.isPending = false // Hybrid payments are not pending
+            }
+
+            // Add transaction entry to driver's wallet
+            driver.wallet.transactionHistory.push(transactionEntry)
+
+            // Update driver wallet and order status
+            await driver.save({ session })
+            order.bookingStatus = 'Completed'
+
+            // If hybrid, mark payment status
+            if (order.paymentMethod === 'Hybrid') {
                 order.driverShare = {
                     ...order.driverShare,
                     Via: 'Customer',
@@ -524,9 +549,6 @@ export const completeBooking = async (req, res, next) => {
                 }
             }
 
-            // Save updates
-            await driver.save({ session })
-            order.bookingStatus = 'Completed'
             await order.save({ session })
 
             // Commit transaction and send response

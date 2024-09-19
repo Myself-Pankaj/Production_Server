@@ -31,6 +31,7 @@ export default {
     //razorpay configuration
     RAZORPAY_API_KEY: process.env.RAZORPAY_API_KEY,
     RAZORPAY_API_SECRET: process.env.RAZORPAY_API_SECRET,
+    RAZORPAY_ACCOUNT_NUMBER: process.env.RAZORPAY_ACCOUNT_NUMBER,
 
     //google map api key
     GOOGLE_MAPS_API_KEY: process.env.GOOGLE_MAPS_API_KEY,

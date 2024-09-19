@@ -336,6 +336,7 @@ export const resetPassword = async (req, res, next) => {
         httpError('RESET PASSWORD', next, error, req, 500)
     }
 }
+
 export const getProfileById = async (req, res, next) => {
     try {
         // Extracting ID from request body
