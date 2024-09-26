@@ -1062,7 +1062,7 @@ export const payoutController = async (req, res, next) => {
             logger.error(`Failed to send payout email to user ${user.email}:`, emailError)
             // Continue as the payout is successful
         }
-        // Return success response
+
         httpResponse(req, res, 200, responseMessage.OPERATION_SUCCESS, transferResult, null, null)
     } catch (error) {
         httpError('PAYOUT_CONTROLLER', next, error, req, 500)

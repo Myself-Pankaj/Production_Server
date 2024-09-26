@@ -57,7 +57,6 @@ export default {
                 const distance = data.rows[0].elements[0].distance.text
                 const duration = data.rows[0].elements[0].duration.text
 
-                // Return success response with distance and duration
                 httpResponse(req, res, 200, 'Distance and duration calculated successfully', { distance, duration }, null)
             } else {
                 // Handle case where Google API responds with non-OK status
