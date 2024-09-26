@@ -11,6 +11,9 @@ import { generateNumericOTP } from '../utils/otherUtils.js'
 import config from '../config/config.js'
 import { Payment } from '../models/paymentModel.js'
 import logger from '../utils/logger.js'
+import { sendMailWithRetry } from '../services/emailServices.js'
+import emails from '../constants/emails.js'
+import date from '../utils/date.js'
 
 export const bookCab = async (req, res, next) => {
     const cashOrderId = `Cash_${generateNumericOTP(9)}`
@@ -161,10 +164,34 @@ export const paymentVerification = async (req, res, next) => {
 
                 // Save the updated order within the transaction
                 await order.save({ session })
-
                 // Commit the transaction
                 await session.commitTransaction()
                 session.endSession()
+
+                // Send confirmation email
+                try {
+                    const formattedPickUpDate = date.formatShortDate(order.departureDate)
+                    const formattedDropOffDate = date.formatShortDate(order.dropOffDate)
+                    const location = order.exactLocation || order.pickupLocation
+
+                    await sendMailWithRetry(
+                        req.user.email,
+                        responseMessage.ORDER_CREATION_EMAIL_SUBJECT,
+                        emails.ORDER_CREATION_SUCCESS_EMAIL(
+                            req.user.username,
+                            formattedPickUpDate,
+                            order._id,
+                            location,
+                            formattedDropOffDate,
+                            order.paymentMethod,
+                            order.paidAmount,
+                            order.bookingAmount
+                        )
+                    )
+                } catch (emailError) {
+                    logger.error(responseMessage.EMAIL_SENDING_FAILED(req.user.email), { meta: { error: emailError } })
+                    // Continue as the payment is successful
+                }
 
                 // Respond with success
                 httpResponse(req, res, 200, responseMessage.PAYMENT_VERIFICATION_SUCCESS, { order, paymentId: razorpay_payment_id }, null)

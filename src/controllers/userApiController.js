@@ -47,15 +47,15 @@ export const register = async (req, res, next) => {
         try {
             await sendMailWithRetry(email, responseMessage.VERIFY_ACCOUNT_EMAIL_SUBJECT, emails.REGISTRATION_EMAIL(username, otp))
         } catch (emailError) {
-            logger.error(responseMessage.EMAIL_SEND_FAIL(email), emailError)
+            logger.error(responseMessage.EMAIL_SENDING_FAILED(email), emailError)
 
-            return httpResponse(req, res, 503, responseMessage.EMAIL_SEND_FAIL(email))
+            return httpResponse(req, res, 503, responseMessage.EMAIL_SENDING_FAILED(email))
         }
         // Clear cache if needed
         // Cachestorage.del(['all_user', 'all_drivers']);
 
         // Send response with token
-        sendToken(req, res, user, 201, responseMessage.ACCOUNT_VERIFICATION)
+        sendToken(req, res, user, 201, responseMessage.OPERATION_SUCCESS)
     } catch (error) {
         // Log other errors
         return httpError('ACCOUNT REGISTRATION', next, error, req, 500)
@@ -132,13 +132,13 @@ export const login = async (req, res, next) => {
         const user = await User.findOne({ email }).select('+password')
 
         if (!user) {
-            throw new CustomError(responseMessage.INVALID_REQUEST, 401)
+            throw new CustomError(responseMessage.RESOURCE_NOT_FOUND('User'), 401)
         }
 
         const isMatch = await user.verifyPassword(password)
 
         if (!isMatch) {
-            throw new CustomError(responseMessage.INVALID_REQUEST, 401)
+            throw new CustomError(responseMessage.AUTHENTICATION_FAILED, 401)
         }
 
         sendToken(req, res, user, 201, responseMessage.LOGIN_SUCCESS)
@@ -270,7 +270,7 @@ export const forgetPassword = async (req, res, next) => {
         const user = await User.findOne({ email })
 
         if (!user) {
-            throw new CustomError(responseMessage.INVALID_EMAIL, 404)
+            throw new CustomError(responseMessage.RESOURCE_NOT_FOUND('User'), 404)
         }
 
         // Generate a random OTP
@@ -294,7 +294,7 @@ export const forgetPassword = async (req, res, next) => {
         } catch (emailError) {
             logger.error(responseMessage.EMAIL_SENDING_FAILED(user.email), { meta: { error: emailError } })
 
-            return httpResponse(req, res, 503, responseMessage.EMAIL_SEND_FAIL(email))
+            return httpResponse(req, res, 503, responseMessage.EMAIL_SENDING_FAILED(email))
         }
         httpResponse(req, res, 200, responseMessage.EMAIL_SENT_SUCCESS(user.email))
     } catch (error) {
@@ -312,7 +312,7 @@ export const resetPassword = async (req, res, next) => {
         })
 
         if (!user) {
-            throw new CustomError(responseMessage.INVALID_INPUT_DATA, 400)
+            throw new CustomError(responseMessage.RESOURCE_NOT_FOUND('User'), 400)
         }
 
         // Set the new password and clear the OTP and its expiry

@@ -11,6 +11,9 @@ import { EApplicationEnvironment } from '../constants/application.js'
 
 import logger from '../utils/logger.js'
 import { fundTransfer, setupRazorpayAccount } from '../services/payoutService.js'
+import { sendMailWithRetry } from '../services/emailServices.js'
+import emails from '../constants/emails.js'
+import date from '../utils/date.js'
 
 export const allCabsAdmin = async (req, res, next) => {
     try {
@@ -546,6 +549,112 @@ export const adminStats = async (req, res, next) => {
     }
 }
 
+// export const assignBooking = async (req, res, next) => {
+//     if (req.user.role !== 'Admin') {
+//         throw new CustomError(responseMessage.UNAUTHORIZED_ACCESS, 403)
+//     }
+
+//     const { id } = req.params
+//     const { newCabId } = req.body
+
+//     if (!id || !newCabId) {
+//         throw new CustomError(responseMessage.INVALID_INPUT_DATA, 403)
+//     }
+
+//     try {
+//         // Fetch the order
+//         const order = await Order.findById(id)
+//         if (!order) {
+//             throw new CustomError(responseMessage.RESOURCE_NOT_FOUND('Booking'), 404)
+//         }
+
+//         // Fetch the cab
+//         const cab = await Cab.findById(newCabId)
+//         if (!cab) {
+//             throw new CustomError(responseMessage.RESOURCE_NOT_FOUND('Cab'), 404)
+//         }
+
+//         // Calculate driver cut based on payment method
+//         let driverCut = order.bookingAmount // Full amount by default
+
+//         driverCut = order.bookingAmount - EApplicationEnvironment.HYBRID_PAYMENT_PERCENTAGE * order.bookingAmount
+
+//         // Update order details
+//         order.driverId = cab.belongsTo
+//         order.bookedCab = newCabId
+//         order.bookingStatus = 'Assigning'
+//         let pay = order.paymentMethod !== 'Online' ? 'Customer' : 'Us'
+
+//         // Assign the driver's share
+//         order.driverShare = {
+//             driverCut: driverCut,
+//             Via: pay
+//         }
+
+//         // Save the order
+//         await order.save()
+
+//         // Add booking to cab
+//         await cab.addBooking(order._id, order.departureDate, order.dropOffDate)
+
+//         // Clear cache
+//         await flushCache()
+//         //sending emails
+//            // Send confirmation email to driver
+//            try {
+//             const formattedPickUpDate = date.formatShortDate(order.departureDate)
+//             const formattedDropOffDate = date.formatShortDate(order.dropOffDate)
+//             const location = order.exactLocation || order.pickupLocation
+
+//             await sendMailWithRetry(
+//                 req.user.email,
+//                 responseMessage.ORDER_CREATION_EMAIL_SUBJECT,
+//                 emails.ORDER_CREATION_SUCCESS_EMAIL(
+//                     req.user.username,
+//                     formattedPickUpDate,
+//                     order._id,
+//                     location,
+//                     formattedDropOffDate,
+//                     order.paymentMethod,
+//                     order.paidAmount,
+//                     order.bookingAmount
+//                 )
+//             )
+//         } catch (emailError) {
+//             logger.error(responseMessage.EMAIL_SENDING_FAILED(req.user.email), { meta: { error: emailError } })
+//             // Continue as the payment is successful
+//         }
+
+//           // Send confirmation email to user
+//           try {
+//             const formattedPickUpDate = date.formatShortDate(order.departureDate)
+//             const formattedDropOffDate = date.formatShortDate(order.dropOffDate)
+//             const location = order.exactLocation || order.pickupLocation
+
+//             await sendMailWithRetry(
+//                 req.user.email,
+//                 responseMessage.ORDER_CREATION_EMAIL_SUBJECT,
+//                 emails.ORDER_CREATION_SUCCESS_EMAIL(
+//                     req.user.username,
+//                     formattedPickUpDate,
+//                     order._id,
+//                     location,
+//                     formattedDropOffDate,
+//                     order.paymentMethod,
+//                     order.paidAmount,
+//                     order.bookingAmount
+//                 )
+//             )
+//         } catch (emailError) {
+//             logger.error(responseMessage.EMAIL_SENDING_FAILED(req.user.email), { meta: { error: emailError } })
+//             // Continue as the payment is successful
+//         }
+//         httpResponse(req, res, 201, responseMessage.CAB_ASSIGN_SUCCESS, null, null, null)
+//     } catch (error) {
+//         httpError('ASSIGNING CAB', next, error, req, 500)
+//     }
+// }
+
 export const assignBooking = async (req, res, next) => {
     if (req.user.role !== 'Admin') {
         throw new CustomError(responseMessage.UNAUTHORIZED_ACCESS, 403)
@@ -559,25 +668,24 @@ export const assignBooking = async (req, res, next) => {
     }
 
     try {
-        // Fetch the order
-        const order = await Order.findById(id)
+        // Fetch the order and populate user details
+        const order = await Order.findById(id).populate('userId', 'email username')
         if (!order) {
             throw new CustomError(responseMessage.RESOURCE_NOT_FOUND('Booking'), 404)
         }
 
-        // Fetch the cab
-        const cab = await Cab.findById(newCabId)
+        // Fetch the cab and populate driver details
+        const cab = await Cab.findById(newCabId).populate('belongsTo', 'email username')
         if (!cab) {
             throw new CustomError(responseMessage.RESOURCE_NOT_FOUND('Cab'), 404)
         }
 
         // Calculate driver cut based on payment method
         let driverCut = order.bookingAmount // Full amount by default
-
         driverCut = order.bookingAmount - EApplicationEnvironment.HYBRID_PAYMENT_PERCENTAGE * order.bookingAmount
 
         // Update order details
-        order.driverId = cab.belongsTo
+        order.driverId = cab.belongsTo._id
         order.bookedCab = newCabId
         order.bookingStatus = 'Assigning'
         let pay = order.paymentMethod !== 'Online' ? 'Customer' : 'Us'
@@ -596,6 +704,31 @@ export const assignBooking = async (req, res, next) => {
 
         // Clear cache
         await flushCache()
+
+        // Prepare formatted dates for emails
+        const formattedPickUpDate = date.formatShortDate(order.departureDate)
+        const formattedDropOffDate = date.formatShortDate(order.dropOffDate)
+        const location = order.exactLocation || order.pickupLocation
+
+        // Send confirmation email to driver
+        try {
+            await sendMailWithRetry(
+                cab.belongsTo.email, // Driver's email
+                responseMessage.DRIVER_ASSIGNMENT_EMAIL_SUBJECT,
+                emails.DRIVER_ASSIGNMENT_EMAIL(
+                    cab.belongsTo.username, // Driver's name
+                    order._id,
+                    formattedPickUpDate,
+                    location,
+                    formattedDropOffDate,
+                    order.paymentMethod,
+                    driverCut
+                )
+            )
+        } catch (emailError) {
+            logger.error(responseMessage.EMAIL_SENDING_FAILED(cab.belongsTo.email), { meta: { error: emailError } })
+            // Continue as the assignment is successful
+        }
 
         httpResponse(req, res, 201, responseMessage.CAB_ASSIGN_SUCCESS, null, null, null)
     } catch (error) {
@@ -714,7 +847,16 @@ export const verifyDriver = async (req, res, next) => {
         } else {
             message = responseMessage.VERIFICATION_REVOKED
         }
-
+        try {
+            await sendMailWithRetry(
+                driver.email, // Driver's email
+                responseMessage.DRIVER_VERIFICATION_EMAIL_SUBJECT,
+                flag ? emails.DRIVER_VERIFIED(driver.username) : emails.DRIVER_VERIFICATION_REVOKED(driver.username)
+            )
+        } catch (emailError) {
+            logger.error(responseMessage.EMAIL_SENDING_FAILED(driver.email), { meta: { error: emailError } })
+            // Continue as the verification is successful
+        }
         httpResponse(req, res, 200, message, null, null, null)
     } catch (error) {
         httpError('DRIVER VERIFICATION', next, error, req, 500)
@@ -909,6 +1051,17 @@ export const payoutController = async (req, res, next) => {
         order.driverShare.paidAt = new Date()
         await order.save()
 
+        try {
+            await sendMailWithRetry(
+                user.email, // Driver's email
+                responseMessage.PAYOUT_EMAIL_SUBJECT(order._id),
+                emails.PAYOUT_SUCCESS_EMAIL(user.username, amount, orderId)
+            )
+            logger.info(`Payout email sent successfully to user ${user.email}`)
+        } catch (emailError) {
+            logger.error(`Failed to send payout email to user ${user.email}:`, emailError)
+            // Continue as the payout is successful
+        }
         // Return success response
         httpResponse(req, res, 200, responseMessage.OPERATION_SUCCESS, transferResult, null, null)
     } catch (error) {

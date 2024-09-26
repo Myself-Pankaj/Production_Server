@@ -32,13 +32,13 @@ export default {
         const { origin, destination } = req.query
         // Check if both origin and destination are provided
         if (!origin || !destination) {
-            return httpError(next, new CustomError('Origin and destination are required', 400), req, 400)
+            return httpError('CALCULATE DISTANCE', next, new CustomError('Origin and destination are required', 400), req, 400)
         }
         const apiKey = config.GOOGLE_MAPS_API_KEY
 
         if (!apiKey) {
             logger.error('Google Maps API key is missing from environment variables')
-            return httpError(next, new CustomError('Server configuration error', 500), req, 500)
+            return httpError('CALCULATE DISTANCE', next, new CustomError('Server configuration error', 500), req, 500)
         }
         try {
             // Call Google Distance Matrix API
@@ -66,7 +66,7 @@ export default {
             }
         } catch (error) {
             // Handle possible errors (like network issues or invalid API keys)
-            return httpError('CALCULATE DISTANCE', next, error, req, 500)
+            httpError('CALCULATE DISTANCE', next, error, req, 500)
         }
     }
 }
