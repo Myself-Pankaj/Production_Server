@@ -54,7 +54,7 @@ export const register = async (req, res, next) => {
         // Clear cache if needed
         // Cachestorage.del(['all_user', 'all_drivers']);
 
-        // Send response with token
+        // Send response with token Okay
         sendToken(req, res, user, 201, responseMessage.OPERATION_SUCCESS)
     } catch (error) {
         // Log other errors
