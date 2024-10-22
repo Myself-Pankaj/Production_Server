@@ -3,6 +3,7 @@ export default {
     // General Success
     OPERATION_SUCCESS: '✅ Success! Your request was completed without a hitch.', // 200
     CACHE_UPDATE_SUCCESS: '✅ Cache updated successfully. Data is now up to date.', // 200
+    SOMETHING_WENT_WRONG: 'Opps! Something went wrong',
 
     // Authentication Success
     LOGIN_SUCCESS: '👋 Welcome back! You’ve logged in successfully.', // 200
@@ -17,10 +18,14 @@ export default {
     PASSWORD_RESET_EMAIL_SUBJECT: (username) => `🔒 Password reset completed for ${username}.`, // 200
     ACCOUNT_VERIFICATION_EMAIL_SUBJECT: (name) => `🎉 Verification complete, ${name}! Your account is now live.`, // 200
     VERIFY_ACCOUNT_EMAIL_SUBJECT: '🔑 Action Required: Verify Your Account',
+    DRIVER_ASSIGNMENT_EMAIL_SUBJECT: '🔄 Got a new Booking.Kindly accept the booking',
+    PAYOUT_EMAIL_SUBJECT: (id) => `Payout for Order ID ${id}`,
+    DRIVER_VERIFICATION_EMAIL_SUBJECT: '📄 Documents verification completed',
     VERIFY_ACCOUNT_EMAIL_BODY: '🔒 Use the OTP provided to complete your account verification.',
     PASSWORD_RESET_EMAIL_BODY: '🔒 Your password has been successfully reset.',
     CAB_REGISTRATION_EMAIL_SUBJECT: '✅ Cab register successfully with us !',
     BOOKING_CONFIRMED_EMAIL_SUBJECT: '✅ Booking confirirmed successfully',
+    ORDER_CREATION_EMAIL_SUBJECT: '✅ Your Booking is Confirmed! ',
     // Email Errors
     EMAIL_SENDING_FAILED: (email) => `❌ Failed to send email to ${email}. Please try again later.`, // 500
 
