@@ -270,7 +270,7 @@ export const forgetPassword = async (req, res, next) => {
         const user = await User.findOne({ email })
 
         if (!user) {
-            throw new CustomError(responseMessage.INVALID_EMAIL, 404)
+            throw new CustomError(responseMessage.INVALID_INPUT_DATA, 404)
         }
 
         // Generate a random OTP
@@ -294,7 +294,7 @@ export const forgetPassword = async (req, res, next) => {
         } catch (emailError) {
             logger.error(responseMessage.EMAIL_SENDING_FAILED(user.email), { meta: { error: emailError } })
 
-            return httpResponse(req, res, 503, responseMessage.EMAIL_SEND_FAIL(email))
+            return httpResponse(req, res, 503, responseMessage.EMAIL_SENDING_FAILED(email))
         }
         httpResponse(req, res, 200, responseMessage.EMAIL_SENT_SUCCESS(user.email))
     } catch (error) {
