@@ -230,7 +230,7 @@ export const getRateDefinedCab = async (req, res, next) => {
         }
 
         // Cache the result for 10 minutes (600 seconds)
-        setCache(cacheKey, cabs, 600)
+        setCache(cacheKey, cabs, 100)
 
         // Return the response with the data
         httpResponse(req, res, 200, responseMessage.OPERATION_SUCCESS, cabs, null)

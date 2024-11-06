@@ -16,6 +16,7 @@ import cabRoute from './src/routes/cabApiRoutes.js'
 import driverRoute from './src/routes/driverApiRoutes.js'
 import orderRoute from './src/routes/orderApiRoutes.js'
 import adminRoute from './src/routes/adminApiRoutes.js'
+import advertismentRoute from './src/routes/advertismentRoute.js'
 import config from './src/config/config.js'
 import { EApplicationEnvironment } from './src/constants/application.js'
 import session from 'express-session'
@@ -67,6 +68,7 @@ app.use('/api/v1', cabRoute)
 app.use('/api/v1', driverRoute)
 app.use('/api/v1', orderRoute)
 app.use('/api/v1', adminRoute)
+app.use('/api/v1', advertismentRoute)
 
 // 404 Error handler
 app.use((req, res, next) => {
